@@ -8,5 +8,4 @@ The python script does the following:
     - draw the frame  
 
 TODO:
-  - calibrate camera
   - compute camera pos.
