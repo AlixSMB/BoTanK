@@ -1,18 +1,17 @@
 'use strict';
 
-let getdom = (el=document, str) => el.getQuerySelectorAll(str);
-function uniqueid(){
-	if (this.val === undefined) this.val = 0;
-	this.val += 1;
-	return this.val;
-}
+let getdom = (el=document, str) => el.querySelectorAll(str);
+
+let uniqueid = (function(){
+	let tmp = 0;
+	return function(){ return ++tmp; }
+})();
 
 let html_inputzone = (on_ok, n=1, values=null, attrs=null, sep="<b>;</b>") => {
-	let n = attrs.length;
 	let inputs = [...Array(n).keys()].map(ind => 
 		`<input 
 			type="text" 
-			${ attrs === null ? "" : ${attrs[ind]} } 
+			${ attrs === null ? "" : attrs[ind] } 
 			${ values === null ? "value='' oldvalue=''" : `value="${values[ind]}" oldvalue="${values[ind]}"` } 
 			onchange="this.parentNode.style.display = 'inline';
 		"></input>
@@ -42,31 +41,31 @@ let tanks = [];
 class Tank{
 	constructor( addr="?addr?" ){
 		this.move = {
-			com = { // command
-				pos = { x=0, y=0 },
-				dir = { x=0, y=0 },
-				vel = { x=0, y=0 }
+			com: { // command
+				pos: { x: 0, y: 0 },
+				dir: { x: 0, y: 0 },
+				vel: { x: 0, y: 0 }
 			},
-			real = { // actual value
-				pos = { x=0, y=0 },
-				dir = { x=0, y=0 },
-				vel = { x=0, y=0 }
+			real: { // actual value
+				pos: { x: 0, y: 0 },
+				dir: { x: 0, y: 0 },
+				vel: { x: 0, y: 0 }
 			},
-			auto = { // automatic mode
-				on = false,
-				target = {0, 0}
+			auto: { // automatic mode
+				on: false,
+				target: {x: 0, y: 0}
 			}
 		};
 		this.canon = {
-			com = {
-				yaw = 0,
-				pitch = 0
+			com: {
+				yaw: 0,
+				pitch: 0
 			},
-			real = {
-				yaw = 0,
-				pitch = 0
+			real: {
+				yaw: 0,
+				pitch: 0
 			},
-			auto = false
+			auto: false
 		};
 		
 		this.id = uniqueid();
@@ -86,7 +85,7 @@ class Tank{
 	}
 }
 function addTank(){
-	let tank = Tank();
+	let tank = new Tank();
 	tanks.push(tank);
 	
 	let tankidattr = `tankid="${tank.id}"`;
