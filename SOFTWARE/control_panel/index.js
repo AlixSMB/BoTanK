@@ -1,7 +1,6 @@
 'use strict';
 
 let getdom = (str, el=document) => [...el.querySelectorAll(str)];
-
 let uniqueid = (function(){
 	let tmp = 0;
 	return function(){ return ++tmp; }
@@ -34,6 +33,8 @@ let html_inputzone = (on_ok, n=1, values=null, attrs=null, sep="<b>;</b>") => {
 		</div>
 	`;
 };
+
+let msgconsole = getdom('#div_msg')[0];
 
 let tanks = [];
 class Tank{
@@ -75,11 +76,22 @@ class Tank{
 		getdom(`img[tankid="${this.id}"]`)[0].src = `http://${this.addr}:8080/video/mjpeg`;
 	}
 	setTargetpos(x, y){
-		console.log("target pos set");
-		// GET...
+		let self = this;
+		fetch(`http://${this.adddr}:8081/move/targetpos`, {method: 'PUT', body: `${x.toFixed(1)};${y.toFixed(1)}`})
+		.then(res => {
+			if (! res.ok){
+				self.dispmsg(`Error setting target pos. (${res.status} ${res.statusText})`);
+			}
+			else self.move.auto = {on: true, target: {x:x, y:y}};
+		})
+		.catch( err => self.dispmsg(`Error setting target pos. (network error)`) );
 	}
 	toggleTargetpos(on){
 		console.log("target pos toggle");
+	}
+	
+	dispmsg(msg){
+		msgconsole.innerHTML += `<br><b>TANK&lt;${this.addr}&gt;</b> :: msg`;
 	}
 }
 function addTank(){
@@ -94,7 +106,7 @@ function addTank(){
 			<div>
 				<input type="checkbox" onchange="toggle_targetpos(this);" checked="${tank.move.auto.on}"></input>
 				Target pos.: ${html_inputzone(
-					in_targetpos, 2, 
+					"in_targetpos", 2, 
 					[tank.move.com.pos.x.toFixed(1), tank.move.com.pos.y.toFixed(1)],
 					[tankidattr+" size=2", tankidattr+" size=2"]
 				)}
