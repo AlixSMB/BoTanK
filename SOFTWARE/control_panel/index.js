@@ -17,7 +17,7 @@ let html_inputzone = (on_ok, n=1, values=null, attrs=null, sep="<b>;</b>") => {
 		></input>`
 	).join(sep);
 	
-	return `<div class="div_inputzone">
+	return `<div class="div_inputzone" style="display:inline;">
 			${inputs}<!--
 			--><div class="div_inbtnctls" style="display:none;">
 				<input type="button" class="btn_ok" value="ok" onclick="
@@ -111,6 +111,4 @@ let tankfromnode = node => tanks.find( tank => tank.id == Number(node.getAttribu
 function in_tankaddr(nodes){ tankfromnode(nodes[0]).setAddr(nodes[0].value); }
 function in_targetpos(nodes){ tankfromnode(nodes[0]).setTargetpos( Number(nodes[0].value), Number(nodes[1].value) ); }
 function toggle_targetpos(node){ tankfromnode(nodes[0]).toggleTargetpos(node.checked); }
-function toggle_camerafeed(node){
-	getdom('img', node.parentNode)[0].style.display = node.checked ? 'inline' : 'none';
-}
+function toggle_camerafeed(node){ getdom('img', node.parentNode)[0].style.display = node.checked ? 'inline-block' : 'none'; }

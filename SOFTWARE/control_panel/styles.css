@@ -18,16 +18,12 @@ body{
 	justify-content: space-between;
 }
 
-.div_inctrlbtns{
-	margin: 0;
-	padding: 0;
-}
 .btn_ok{
 	color: green;
 	font-style: bold;
 	margin-right: 0;
 }
-.btn_no{
+.btn_cancel{
 	color: red;
 	font-style: bold;
 	margin-left: 0;
