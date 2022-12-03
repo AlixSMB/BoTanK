@@ -1,6 +1,6 @@
 'use strict';
 
-let getdom = (el=document, str) => el.querySelectorAll(str);
+let getdom = (str, el=document) => [...el.querySelectorAll(str)];
 
 let uniqueid = (function(){
 	let tmp = 0;
@@ -13,28 +13,26 @@ let html_inputzone = (on_ok, n=1, values=null, attrs=null, sep="<b>;</b>") => {
 			type="text" 
 			${ attrs === null ? "" : attrs[ind] } 
 			${ values === null ? "value='' oldvalue=''" : `value="${values[ind]}" oldvalue="${values[ind]}"` } 
-			onchange="this.parentNode.style.display = 'inline';
-		"></input>
-	`).join(sep);
+			oninput="getdom('div', this.parentNode)[0].style.display = 'inline';"
+		></input>`
+	).join(sep);
 	
-	return `
-		<div class="div_inputzone" style="display:none;">
+	return `<div class="div_inputzone">
 			${inputs}<!--
-			--><div class="div_inbtnctls">
+			--><div class="div_inbtnctls" style="display:none;">
 				<input type="button" class="btn_ok" value="ok" onclick="
-					let nodes = getdom(this.parentnode.parentnode, 'input').splice(0, ${n});
+					let nodes = getdom('input', this.parentNode.parentNode).splice(0, ${n});
 					${on_ok}(nodes);
 					nodes.forEach(node => node.setAttribute('oldvalue', node.value));
-					this.parentNode.style.display = none;
+					this.parentNode.style.display = 'none';
 				"></input>
 				<input type="button" class="btn_cancel" value="X" onclick="
-					getdom(this.parentnode.parentnode, 'input').splice(0, ${n}).forEach(node => node.value = node.getAttribute('oldvalue'));
-					this.parentNode.style.display = none;
+					getdom('input', this.parentNode.parentNode).splice(0, ${n}).forEach(node => node.value = node.getAttribute('oldvalue'));
+					this.parentNode.style.display = 'none';
 				"></input>
 			</div>
 		</div>
 	`;
-	
 };
 
 let tanks = [];
@@ -92,13 +90,13 @@ function addTank(){
 	
 	getdom('#div_tanks')[0].innerHTML += `
 		<div class="div_tank">
-			<div>Tank ${html_inputzone("in_tankaddr", [tank.addr], [tankidattr])}</div>
+			<div>Tank ${html_inputzone("in_tankaddr", 1, [tank.addr], [tankidattr+" size=6"])}</div>
 			<div>
 				<input type="checkbox" onchange="toggle_targetpos(this);" checked="${tank.move.auto.on}"></input>
 				Target pos.: ${html_inputzone(
 					in_targetpos, 2, 
-					[tank.mov.com.pos.x.toFixed(1), tank.mov.com.pos.y.toFixed(1)],
-					[tankidattr, tankidattr]
+					[tank.move.com.pos.x.toFixed(1), tank.move.com.pos.y.toFixed(1)],
+					[tankidattr+" size=2", tankidattr+" size=2"]
 				)}
 			</div>
 			<div>
@@ -114,5 +112,5 @@ function in_tankaddr(nodes){ tankfromnode(nodes[0]).setAddr(nodes[0].value); }
 function in_targetpos(nodes){ tankfromnode(nodes[0]).setTargetpos( Number(nodes[0].value), Number(nodes[1].value) ); }
 function toggle_targetpos(node){ tankfromnode(nodes[0]).toggleTargetpos(node.checked); }
 function toggle_camerafeed(node){
-	getdom(node.parentNode, 'img')[0].style.display = node.checked ? 'inline' : 'none';
+	getdom('img', node.parentNode)[0].style.display = node.checked ? 'inline' : 'none';
 }
