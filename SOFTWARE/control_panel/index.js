@@ -75,9 +75,15 @@ class Tank{
 	
 	setAddr(addr){
 		this.addr = addr;
-		//getdom()
+		getdom(`img[tankid="${this.id}"]`)[0].src = `http://${this.addr}:8080/video/mjpeg`;
 	}
-	setTargetpos
+	setTargetpos(x, y){
+		console.log("target pos set");
+		// GET...
+	}
+	toggleTargetpos(on){
+		console.log("target pos toggle");
+	}
 }
 function addTank(){
 	let tank = Tank();
@@ -97,9 +103,17 @@ function addTank(){
 				)}
 			</div>
 			<div>
-				Camera feed:
-				<img
+				<input type="checkbox" onchange="toggle_camerafeed(this);" checked="true"></input>Camera feed:
+				<img width=200 style="-webkit-user-select:none;display:inline;" ${tankidattr}>
 			</div>
 		</div>
 	`;
+}
+let tankfromnode = node => tanks.find( tank => tank.id == Number(node.getAttribute('tankid')) );
+
+function in_tankaddr(nodes){ tankfromnode(nodes[0]).setAddr(nodes[0].value); }
+function in_targetpos(nodes){ tankfromnode(nodes[0]).setTargetpos( Number(nodes[0].value), Number(nodes[1].value) ); }
+function toggle_targetpos(node){ tankfromnode(nodes[0]).toggleTargetpos(node.checked); }
+function toggle_camerafeed(node){
+	getdom(node.parentNode, 'img')[0].style.display = node.checked ? 'inline' : 'none';
 }
