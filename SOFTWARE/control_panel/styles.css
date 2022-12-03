@@ -1,0 +1,50 @@
+html{
+	background-color: white;
+	color: black;
+	padding: none;
+	margin: none;
+}
+div, canvas{
+	border: 1px solid black;
+}
+body{
+	/*position: absolute;*/
+	/*top: 0%;           */
+	/*left: 0%;          */
+	/*width: 100%;       */
+	/*height: 100%;      */
+	/*padding: 5px;      */
+	display: flex;
+	justify-content: space-between;
+}
+
+.div_inctrlbtns{
+	margin: 0;
+	padding: 0;
+}
+.btn_ok{
+	color: green;
+	font-style: bold;
+	margin-right: 0;
+}
+.btn_no{
+	color: red;
+	font-style: bold;
+	margin-left: 0;
+}
+
+#div_data{
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+}
+#btn_addtank{
+}
+.div_tank{
+	margin: 10px;
+}
+#div_tanks{
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-evenly;
+}
