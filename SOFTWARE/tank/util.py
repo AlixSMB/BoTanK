@@ -5,7 +5,7 @@ import time
 
 def partial(fun, *args1):
 	return lambda *args2: fun(*args1, *args2)
-def noop():
+def noop(*args):
 	pass
 
 # create anonymous objects
@@ -134,9 +134,12 @@ class HTTPServer:
 		else : return sent
 
 
+def http_empty(code, status):
+	return bytes(f'HTTP/1.1 {code} {status}\r\nAccess-Control-Allow-Origin: *\r\n\r\n', 'utf-8')
 def http_txtresp(code, status, bindata):
 	return bytes(
 		f'HTTP/1.1 {code} {status}\r\n' +
 		'Content-Type: text/plain; charset=utf-8\r\n' +
-		f'Content-Length: {len(bindata)}\r\n\r\n'
+		f'Content-Length: {len(bindata)}\r\n' +
+		'Access-Control-Allow-Origin: *\r\n\r\n'
 	, 'utf-8') + bindata

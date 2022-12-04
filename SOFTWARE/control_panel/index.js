@@ -38,7 +38,7 @@ let msgconsole = getdom('#div_msg')[0];
 
 let tanks = [];
 class Tank{
-	constructor( addr="?addr?" ){
+	constructor( addr="localhost" ){
 		this.move = {
 			com: { // command
 				pos: { x: 0, y: 0 },
@@ -77,21 +77,24 @@ class Tank{
 	}
 	setTargetpos(x, y){
 		let self = this;
-		fetch(`http://${this.adddr}:8081/move/targetpos`, {method: 'PUT', body: `${x.toFixed(1)};${y.toFixed(1)}`})
+		fetch(`http://${this.addr}:8081/move/targetpos`, {method: 'PUT', body: `${x.toFixed(1)};${y.toFixed(1)}`})
 		.then(res => {
 			if (! res.ok){
 				self.dispmsg(`Error setting target pos. (${res.status} ${res.statusText})`);
 			}
 			else self.move.auto = {on: true, target: {x:x, y:y}};
 		})
-		.catch( err => self.dispmsg(`Error setting target pos. (network error)`) );
+		.catch( err => self.dispmsg(`Error setting target pos. (${err})`) );
 	}
 	toggleTargetpos(on){
 		console.log("target pos toggle");
 	}
+	refresh(){
+		this.setAddr(this.addr);
+	}
 	
 	dispmsg(msg){
-		msgconsole.innerHTML += `<br><b>TANK&lt;${this.addr}&gt;</b> :: msg`;
+		msgconsole.innerHTML += `<br><b>TANK&lt;${this.addr}&gt;</b> :: ${msg}`;
 	}
 }
 function addTank(){
@@ -113,10 +116,12 @@ function addTank(){
 			</div>
 			<div>
 				<input type="checkbox" onchange="toggle_camerafeed(this);" checked="true"></input>Camera feed:
-				<img width=200 style="-webkit-user-select:none;display:inline;" ${tankidattr}>
+				<img width=200 style="-webkit-user-select:none;display:inline-block;" ${tankidattr}>
 			</div>
 		</div>
 	`;
+	
+	tank.refresh();
 }
 let tankfromnode = node => tanks.find( tank => tank.id == Number(node.getAttribute('tankid')) );
 

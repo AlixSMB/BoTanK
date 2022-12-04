@@ -50,12 +50,12 @@ def httpserv_sendvec2d(serv, addr, vec):
 	), addr)
 def httpserv_recvvec2d(serv, addr):
 	try:
-		x, y = parser.body.decode('utf-8').split(';')
+		x, y = serv.parsers[addr].body.decode('utf-8').split(';')
 	except:
-		serv.sendraw(bytes('HTTP/1.1 400 BAD VALUES\r\n\r\n', 'utf-8'), addr)
+		serv.sendraw(http_empty(400, 'BAD VALUES'), addr)
 		return None
 	else:
-		serv.sendraw(bytes('HTTP/1.1 200 OK\r\n\r\n', 'utf-8'), addr)
+		serv.sendraw(http_empty(204, 'OK'),  addr)
 		return float(x), float(y)
 
 def localcam_onmsg(self, addr):
@@ -90,21 +90,25 @@ def coms_onmsg(self, addr):
 		parser = self.serv.parsers[addr]
 		
 		if parser.method == b'GET':
-			if parser.url == b'/pos'    : httpserv_sendvec2d(self.serv, addr, tankpos)
-			elif parser.url == b'/speed': httpserv_sendvec2d(self.serv, addr, tankrealspeed)
+			if parser.url == b'/move/pos'    : httpserv_sendvec2d(self.serv, addr, tankpos)
+			elif parser.url == b'/move/speed': httpserv_sendvec2d(self.serv, addr, tankrealspeed)
 		elif parser.method == b'PUT':
-			if parser.url == b'/auto/on':
+			if parser.url == b'/move/auto/on':
 				pass
 				#...
-			elif parser.url == b'/auto/off':
+			elif parser.url == b'/move/auto/off':
 				pass
 				#...
-			elif parser.url == b'/speed':
+			elif parser.url == b'/move/speed':
 				httpserv_recvvec2d(self.serv, addr)
 				#...
-			elif parser.url == b'/targetpos':
-				httpserv_recvvec2d(self.serv, addr)
+			elif parser.url == b'/move/targetpos':
+				res = httpserv_recvvec2d(self.serv, addr)
+				print(res)
 				#...
+		elif parser.method == b'OPTIONS': 
+			self.serv.sendraw(bytes('HTTP/1.1 204 OK\r\nAccess-Control-Allow-Methods: OPTIONS, GET, PUT\r\nAccess-Control-Allow-Origin: *\r\n\r\n', 'utf-8'), addr)
+		else : self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
 ctrlpanel = { 
 	# local cam mjpeg streaming server
 	'localcamera': CtrlPanelServer(
