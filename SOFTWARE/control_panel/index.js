@@ -6,6 +6,7 @@ let uniqueid = (function(){
 	return function(){ return ++tmp; }
 })();
 
+function resetNodesVals(nodes){ nodes.forEach(node => node.value = node.getAttribute('oldvalue')); }
 let html_inputzone = (on_ok, n=1, values=null, attrs=null, sep="<b>;</b>") => {
 	let inputs = [...Array(n).keys()].map(ind => 
 		`<input 
@@ -19,14 +20,14 @@ let html_inputzone = (on_ok, n=1, values=null, attrs=null, sep="<b>;</b>") => {
 	return `<div class="div_inputzone" style="display:inline;">
 			${inputs}<!--
 			--><div class="div_inbtnctls" style="display:none;">
-				<input type="button" class="btn_ok" value="ok" onclick="
+				<input type="image" src="res/check.png" class="btn_ok" onclick="
 					let nodes = getdom('input', this.parentNode.parentNode).splice(0, ${n});
 					${on_ok}(nodes);
 					nodes.forEach(node => node.setAttribute('oldvalue', node.value));
 					this.parentNode.style.display = 'none';
 				"></input>
-				<input type="button" class="btn_cancel" value="X" onclick="
-					getdom('input', this.parentNode.parentNode).splice(0, ${n}).forEach(node => node.value = node.getAttribute('oldvalue'));
+				<input type="image" src="res/cancel.png" class="btn_cancel" onclick="
+					resetNodesVals( getdom('input', this.parentNode.parentNode).splice(0, ${n}) );
 					this.parentNode.style.display = 'none';
 				"></input>
 			</div>
@@ -75,22 +76,38 @@ class Tank{
 		this.addr = addr;
 		getdom(`img[tankid="${this.id}"]`)[0].src = `http://${this.addr}:8080/video/mjpeg`;
 	}
-	setTargetpos(x, y){
+	setTargetpos(nodes, x, y){
 		let self = this;
 		fetch(`http://${this.addr}:8081/move/targetpos`, {method: 'PUT', body: `${x.toFixed(1)};${y.toFixed(1)}`})
 		.then(res => {
-			if (! res.ok){
+			if (res.ok){
+				self.move.auto.target = {x: x, y: y};
+				self.dispmsg(`Target pos. set to (${x};${y})`);
+			}
+			else{ 
+				resetNodesVals(nodes);
 				self.dispmsg(`Error setting target pos. (${res.status} ${res.statusText})`);
 			}
-			else self.move.auto = {on: true, target: {x:x, y:y}};
 		})
 		.catch( err => self.dispmsg(`Error setting target pos. (${err})`) );
 	}
-	toggleTargetpos(on){
-		console.log("target pos toggle");
+	toggleTargetpos(node, on){
+		let self = this;
+		fetch(`http://${this.addr}:8081/move/auto/${on ? 'on' : 'off'}`, {method: 'PUT'})
+		.then(res => {
+			if (res.ok){
+				self.move.auto.on = on;
+				self.dispmsg(`Autonomous movement ${on ? 'enabled' : 'disabled'}`);
+			}
+			else{ 
+				resetNodesVals(nodes);
+				self.dispmsg(`Error ${on ? 'enabling' : 'disabling'} autonomous movement (${res.status} ${res.statusText})`);
+			}
+		})
+		.catch( err => self.dispmsg(`Error ${on ? 'enabling' : 'disabling'} autonomous movement (${err})`) );
 	}
 	refresh(){
-		this.setAddr(this.addr);
+		getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).forEach(el => el.click());
 	}
 	
 	dispmsg(msg){
@@ -104,8 +121,11 @@ function addTank(){
 	let tankidattr = `tankid="${tank.id}"`;
 	
 	getdom('#div_tanks')[0].innerHTML += `
-		<div class="div_tank">
-			<div>Tank ${html_inputzone("in_tankaddr", 1, [tank.addr], [tankidattr+" size=6"])}</div>
+		<div class="div_tank" ${tankidattr}>
+			<div>
+				Tank ${html_inputzone("in_tankaddr", 1, [tank.addr], [tankidattr+" size=6"])}
+				<input type="image" src="res/sync.png" onclick="tankfromid(${tank.id}).refresh()" class="btn_refresh"></input>
+			</div>
 			<div>
 				<input type="checkbox" onchange="toggle_targetpos(this);" checked="${tank.move.auto.on}"></input>
 				Target pos.: ${html_inputzone(
@@ -116,16 +136,15 @@ function addTank(){
 			</div>
 			<div>
 				<input type="checkbox" onchange="toggle_camerafeed(this);" checked="true"></input>Camera feed:
-				<img width=200 style="-webkit-user-select:none;display:inline-block;" ${tankidattr}>
+				<img width=200 style="-webkit-user-select:none;display:block;" ${tankidattr}>
 			</div>
 		</div>
 	`;
-	
-	tank.refresh();
 }
-let tankfromnode = node => tanks.find( tank => tank.id == Number(node.getAttribute('tankid')) );
+let tankfromid = id => tanks.find(tank => tank.id == id)
+let tankfromnode = node => tankfromid( Number(node.getAttribute('tankid')) );
 
 function in_tankaddr(nodes){ tankfromnode(nodes[0]).setAddr(nodes[0].value); }
-function in_targetpos(nodes){ tankfromnode(nodes[0]).setTargetpos( Number(nodes[0].value), Number(nodes[1].value) ); }
-function toggle_targetpos(node){ tankfromnode(nodes[0]).toggleTargetpos(node.checked); }
-function toggle_camerafeed(node){ getdom('img', node.parentNode)[0].style.display = node.checked ? 'inline-block' : 'none'; }
+function in_targetpos(nodes){ tankfromnode(nodes[0]).setTargetpos(nodes, Number(nodes[0].value), Number(nodes[1].value)); }
+function toggle_targetpos(node){ tankfromnode(node).toggleTargetpos(node, node.checked); }
+function toggle_camerafeed(node){ getdom('img', node.parentNode)[0].style.display = node.checked ? 'block' : 'none'; }

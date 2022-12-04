@@ -5,7 +5,7 @@ html{
 	margin: none;
 }
 div, canvas{
-	border: 1px solid black;
+	/*border: 1px solid black;*/
 }
 body{
 	/*position: absolute;*/
@@ -18,15 +18,22 @@ body{
 	justify-content: space-between;
 }
 
+.btn_refresh{
+	width: 1rem;
+	float: right;
+	background-color: rgb(125,125,255);
+}
 .btn_ok{
-	color: green;
 	font-style: bold;
 	margin-right: 0;
+	width: 1rem;
+	background-color: rgb(125,255,125);
 }
 .btn_cancel{
-	color: red;
 	font-style: bold;
 	margin-left: 0;
+	width: 1rem;
+	background-color: rgb(255,125,125);
 }
 
 #div_data{

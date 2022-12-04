@@ -104,8 +104,8 @@ def coms_onmsg(self, addr):
 				#...
 			elif parser.url == b'/move/targetpos':
 				res = httpserv_recvvec2d(self.serv, addr)
-				print(res)
-				#...
+				if res is not None:
+					pass
 		elif parser.method == b'OPTIONS': 
 			self.serv.sendraw(bytes('HTTP/1.1 204 OK\r\nAccess-Control-Allow-Methods: OPTIONS, GET, PUT\r\nAccess-Control-Allow-Origin: *\r\n\r\n', 'utf-8'), addr)
 		else : self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
