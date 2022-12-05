@@ -56,7 +56,7 @@ class Tank{
 				target: {x: 0, y: 0}
 			}
 		};
-		this.canon = {
+		this.cannon = {
 			com: {
 				yaw: 0,
 				pitch: 0
@@ -76,42 +76,55 @@ class Tank{
 		this.addr = addr;
 		getdom(`img[tankid="${this.id}"]`)[0].src = `http://${this.addr}:8080/video/mjpeg`;
 	}
-	setTargetpos(nodes, x, y){
+	
+	setData(path, data, on_ok, on_errcode, on_errnet){
 		let self = this;
-		fetch(`http://${this.addr}:8081/move/targetpos`, {method: 'PUT', body: `${x.toFixed(1)};${y.toFixed(1)}`})
+		fetch(`http://${this.addr}:8081${path}`, {method: 'PUT', body: data})
 		.then(res => {
-			if (res.ok){
-				self.move.auto.target = {x: x, y: y};
-				self.dispmsg(`Target pos. set to (${x};${y})`);
-			}
-			else{ 
-				resetNodesVals(nodes);
-				self.dispmsg(`Error setting target pos. (${res.status} ${res.statusText})`);
-			}
+			if (res.ok) on_ok(self);
+			else on_errcode(res.status, res.statusText, self);
 		})
-		.catch( err => self.dispmsg(`Error setting target pos. (${err})`) );
+		.catch( err => on_errnet(err, self) );
 	}
+	setVec2d(nodes, x, y, path, typestr, obj){
+		this.setData(
+			path, `${x.toFixed(1)};${y.toFixed(1)}`, 
+			self => {
+				obj.x = x; obj.y = y;
+				self.dispmsg(`${typestr} set to (${x};${y})`);
+			}, 
+			(code, status, self) => {
+				if (nodes !== null) resetNodesVals(nodes);
+				self.dispmsg(`Error setting ${typestr} (${code} ${status})`);
+			},
+			(err, self) => self.dispmsg(`Error setting ${typestr} (${err})`)
+		);
+	}
+	setVel(x, y){              this.setVec2d(null,  x, y, '/move/vel',            'velocity',    this.move.com.vel    ); }
+	setTargetpos(nodes, x, y){ this.setVec2d(nodes, x, y, '/move/auto/targetpos', 'target pos.', this.move.auto.target); }
 	toggleTargetpos(node, on){
-		let self = this;
-		fetch(`http://${this.addr}:8081/move/auto/${on ? 'on' : 'off'}`, {method: 'PUT'})
-		.then(res => {
-			if (res.ok){
+		this.setData(
+			`/move/auto/${on ? 'on' : 'off'}`, '', 
+			self => {
 				self.move.auto.on = on;
 				self.dispmsg(`Autonomous movement ${on ? 'enabled' : 'disabled'}`);
-			}
-			else{ 
-				resetNodesVals(nodes);
-				self.dispmsg(`Error ${on ? 'enabling' : 'disabling'} autonomous movement (${res.status} ${res.statusText})`);
-			}
-		})
-		.catch( err => self.dispmsg(`Error ${on ? 'enabling' : 'disabling'} autonomous movement (${err})`) );
+			}, 
+			(code, status, self) => {
+				node.checked = self.move.auto.on;
+				self.dispmsg(`Error ${on ? 'enabling' : 'disabling'} autonomous movement (${code} ${status})`);
+			},
+			(err, self) => self.dispmsg(`Error ${on ? 'enabling' : 'disabling'} autonomous movement (${err})`)
+		);
 	}
+	
+	
 	refresh(){
 		getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).forEach(el => el.click());
+		getdom(`.div_tank[tankid="${this.id}"] .check_com`).forEach(el => el.onchange());
 	}
 	
 	dispmsg(msg){
-		msgconsole.innerHTML += `<br><b>TANK&lt;${this.addr}&gt;</b> :: ${msg}`;
+		msgconsole.innerHTML += `<br>TANK&lt;${this.addr}&gt; <b>::</b> ${msg}`;
 	}
 }
 function addTank(){
@@ -127,7 +140,7 @@ function addTank(){
 				<input type="image" src="res/sync.png" onclick="tankfromid(${tank.id}).refresh()" class="btn_refresh"></input>
 			</div>
 			<div>
-				<input type="checkbox" onchange="toggle_targetpos(this);" checked="${tank.move.auto.on}"></input>
+				<input type="checkbox" onchange="toggle_targetpos(this);" checked="${tank.move.auto.on}" class="check_com" ${tankidattr}></input>
 				Target pos.: ${html_inputzone(
 					"in_targetpos", 2, 
 					[tank.move.com.pos.x.toFixed(1), tank.move.com.pos.y.toFixed(1)],
