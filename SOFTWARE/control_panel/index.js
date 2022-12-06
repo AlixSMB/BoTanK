@@ -65,7 +65,7 @@ class Tank{
 				yaw: 0,
 				pitch: 0
 			},
-			auto: false
+			auto: {on: false}
 		};
 		
 		this.id = uniqueid();
@@ -95,28 +95,66 @@ class Tank{
 			}, 
 			(code, status, self) => {
 				if (nodes !== null) resetNodesVals(nodes);
-				self.dispmsg(`Error setting ${typestr} (${code} ${status})`);
+				self.dispmsg(`error setting ${typestr} (${code} ${status})`);
 			},
-			(err, self) => self.dispmsg(`Error setting ${typestr} (${err})`)
+			(err, self) => self.dispmsg(`error setting ${typestr} (${err})`)
 		);
 	}
-	setVel(x, y){              this.setVec2d(null,  x, y, '/move/vel',            'velocity',    this.move.com.vel    ); }
-	setTargetpos(nodes, x, y){ this.setVec2d(nodes, x, y, '/move/auto/targetpos', 'target pos.', this.move.auto.target); }
-	toggleTargetpos(node, on){
+	setVel(x, y){              this.setVec2d(null,  x, y, '/move/real/vel',    'velocity',    this.move.com.vel    ); }
+	setTargetpos(nodes, x, y){ this.setVec2d(nodes, x, y, '/move/auto/target', 'target pos.', this.move.auto.target); }
+	toggleAuto(node, on, type){
 		this.setData(
-			`/move/auto/${on ? 'on' : 'off'}`, '', 
+			`/${type}/auto/${on ? 'on' : 'off'}`, '', 
 			self => {
-				self.move.auto.on = on;
-				self.dispmsg(`Autonomous movement ${on ? 'enabled' : 'disabled'}`);
+				self[type].auto.on = on;
+				self.dispmsg(`autonomous ${type} ${on ? 'enabled' : 'disabled'}`);
 			}, 
 			(code, status, self) => {
-				node.checked = self.move.auto.on;
-				self.dispmsg(`Error ${on ? 'enabling' : 'disabling'} autonomous movement (${code} ${status})`);
+				node.checked = self[type].auto.on;
+				self.dispmsg(`error ${on ? 'enabling' : 'disabling'} autonomous ${type} (${code} ${status})`);
 			},
-			(err, self) => self.dispmsg(`Error ${on ? 'enabling' : 'disabling'} autonomous movement (${err})`)
+			(err, self) => self.dispmsg(`error ${on ? 'enabling' : 'disabling'} autonomous ${type} (${err})`)
 		);
 	}
 	
+	getData(path, on_ok, on_errcode, on_errnet){
+		let self = this;
+		fetch(`http://${this.addr}:8081${path}`, {method: 'GET'})
+		.then(res => {
+			if (res.ok) res.text().then(txt => on_ok(txt, self)).catch(err => on_errnet(err, self));
+			else on_errcode(res.status, res.statusText, self);
+		})
+		.catch( err => on_errnet(err, self) );
+	}
+	getVec2d(path, typestr, obj){
+		this.getData(
+			path, 
+			(txt, self) => {
+				try{
+					let [x,y] = txt.split(";");
+					obj.x = Number(x); obj.y = Number(y);
+					self.dispmsg(`${typestr} is (${x};${y})`);
+				}
+				catch (err){ self.dispmsg(`error getting ${typestr} (${err})`); }
+			}, 
+			(code, status, self) => self.dispmsg(`error getting ${typestr} (${code} ${status})`),
+			(err, self) => self.dispmsg(`error getting ${typestr} (${err})`)
+		);
+	}
+	getPos(){ this.getVec2d("/move/real/pos", "real pos.", this.move.real.pos); }
+	getDir(){ this.getVec2d("/move/real/dir", "real dir.", this.move.real.dir); }
+	getAuto(type){
+		this.getData(
+			`/${type}/auto/on`, 
+			(txt, self) => {
+				if (txt == '1')     { self.dispmsg(`autonomous ${type} is enabled`); self[type].auto.on = true;   }
+				else if (txt == '0'){ self.dispmsg(`autonomous ${type} is disabled`); self[type].auto.on = false; }
+				else                  self.dispmsg(`error getting autonomous ${type} status`);
+			}, 
+			(code, status, self) => self.dispmsg(`error getting autonomous ${type} status (${code} ${status})`),
+			(err, self) => self.dispmsg(`error getting autonomous ${type} status (${err})`)
+		);
+	}
 	
 	refresh(){
 		getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).forEach(el => el.click());
@@ -139,8 +177,9 @@ function addTank(){
 				Tank ${html_inputzone("in_tankaddr", 1, [tank.addr], [tankidattr+" size=6"])}
 				<input type="image" src="res/sync.png" onclick="tankfromid(${tank.id}).refresh()" class="btn_refresh"></input>
 			</div>
+			<input type="checkbox" onchange="toggle_auto(this, 'move');" checked="${tank.move.auto.on}" class="check_com" ${tankidattr}></input>Auto move<br>
+			<input type="checkbox" onchange="toggle_auto(this, 'cannon');" checked="${tank.cannon.auto.on}" class="check_com" ${tankidattr}></input>Auto aim
 			<div>
-				<input type="checkbox" onchange="toggle_targetpos(this);" checked="${tank.move.auto.on}" class="check_com" ${tankidattr}></input>
 				Target pos.: ${html_inputzone(
 					"in_targetpos", 2, 
 					[tank.move.com.pos.x.toFixed(1), tank.move.com.pos.y.toFixed(1)],
@@ -159,5 +198,5 @@ let tankfromnode = node => tankfromid( Number(node.getAttribute('tankid')) );
 
 function in_tankaddr(nodes){ tankfromnode(nodes[0]).setAddr(nodes[0].value); }
 function in_targetpos(nodes){ tankfromnode(nodes[0]).setTargetpos(nodes, Number(nodes[0].value), Number(nodes[1].value)); }
-function toggle_targetpos(node){ tankfromnode(node).toggleTargetpos(node, node.checked); }
+function toggle_auto(node, type){ tankfromnode(node).toggleAuto(node, node.checked, type); }
 function toggle_camerafeed(node){ getdom('img', node.parentNode)[0].style.display = node.checked ? 'block' : 'none'; }

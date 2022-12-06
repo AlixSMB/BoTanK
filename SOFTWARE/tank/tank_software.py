@@ -88,27 +88,35 @@ def localcam_onmsg(self, addr):
 def coms_onmsg(self, addr):
 	if self.serv.readfull(addr): # we parsed the full request
 		parser = self.serv.parsers[addr]
+		path = [part.decode('utf-8') for part in parser.url.split(b'/')[1:]]
 		
 		if parser.method == b'GET':
 			
-			if parser.url == b'/move/pos'  : httpserv_sendvec2d(self.serv, addr, data['move']['real']['pos'])
-			elif parser.url == b'/move/vel': httpserv_sendvec2d(self.serv, addr, data['move']['real']['vel'])
+			try:
+				if path[-1] == 'on':
+					self.serv.sendraw(http_txtresp(
+						200, 'OK', bytes('1' if data[path[0]][path[1]]['on'] else '0', 'utf-8')
+					), addr)
+				else:
+					httpserv_sendvec2d(self.serv, addr, data[path[0]][path[1]][path[2]])
+			except:
+				self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
 		
 		elif parser.method == b'PUT':
 			
-			if parser.url == b'/move/auto/on': 
-				data['move']['auto']['on'] = True
-				self.serv.sendraw(http_empty(204, 'OK'),  addr)
-			elif parser.url == b'/move/auto/off': 
-				data['move']['auto']['on'] = False
-				self.serv.sendraw(http_empty(204, 'OK'),  addr)
-			elif parser.url == b'/move/auto/targetpos':
-				res = httpserv_recvvec2d(self.serv, addr)
-				if res is not None: data['move']['auto']['target'] = res
-			elif parser.url == b'/move/vel':
-				res = httpserv_recvvec2d(self.serv, addr)
-				if res is not None: data['move']['com']['vel'] = res
-		
+			try:
+				if path[-1] == 'on':
+					data[path[0]][path[1]]['on'] = True
+					self.serv.sendraw(http_empty(204, 'OK'), addr)
+				elif path[-1] == 'off':
+					data[path[0]][path[1]]['on'] = False
+					self.serv.sendraw(http_empty(204, 'OK'), addr)
+				else:
+					res = httpserv_recvvec2d(self.serv, addr)
+					if res is not None: data[path[0]][path[1]][path[2]] = res
+			except:
+				self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
+			
 		elif parser.method == b'OPTIONS': 
 			self.serv.sendraw(bytes('HTTP/1.1 204 OK\r\nAccess-Control-Allow-Methods: OPTIONS, GET, PUT\r\nAccess-Control-Allow-Origin: *\r\n\r\n', 'utf-8'), addr)
 		
@@ -152,12 +160,12 @@ data = {
 			'yaw': 0,
 			'pitch': 0
 		},
-		'auto': False
+		'auto': {'on': False}
 	}	
 };
 
 set_timer('sockalive', 0.5) # might be unnecessary, but may help performance
-set_timer('sockconnect', 0.1)
+#set_timer('sockconnect', 0.1)
 while True:
 	global camera_frame, camera_jpegbytes, tankpos, tank_realspeed, tank_targetspeed
 	timers_start()
@@ -172,8 +180,8 @@ while True:
 	
 	
 	# listen for http connections
-	if check_timer('sockconnect'):
-		for part in ctrlpanel : ctrlpanel[part].serv.connect()
+	#if check_timer('sockconnect'):
+	for part in ctrlpanel : ctrlpanel[part].serv.connect()
 	# check connections
 	if check_timer('sockalive'):
 		for part in ctrlpanel : ctrlpanel[part].checkdead()
@@ -188,3 +196,4 @@ while True:
 # TODO:
 # 	- optimize code:
 #		- for ... in list(...dict...)
+#		- use dict for url dispatcher ?
