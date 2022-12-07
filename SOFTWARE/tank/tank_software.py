@@ -61,7 +61,7 @@ def httpserv_recvvec2d(serv, addr):
 def localcam_onmsg(self, addr):
 	if self.serv.readfull(addr): # we parsed the full request
 		parser = self.serv.parsers[addr]
-		if parser.url == b'/video/mjpeg' and parser.method == b'GET':
+		if parser.url.find(b'/video/mjpeg') == 0 and parser.method == b'GET':
 			sent = self.serv.sendraw(bytes(
 				'HTTP/1.1 200 OK\r\n' +
 				'Cache-Control: no-cache\r\n' +
@@ -71,9 +71,7 @@ def localcam_onmsg(self, addr):
 				self.data['streams'].add(addr)
 				set_timer('localcamfps', 1/20)
 		else:
-			self.serv.sendraw(bytes(
-				'HTTP/1.1 400 BAD REQUEST\r\n\r\n'
-			, 'utf-8'), addr)
+			self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
 	
 	if addr in self.data['streams'] and check_timer('localcamfps'):
 		self.serv.sendraw(
@@ -197,3 +195,4 @@ while True:
 # 	- optimize code:
 #		- for ... in list(...dict...)
 #		- use dict for url dispatcher ?
+#	- handle timers differently ?

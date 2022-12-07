@@ -19,10 +19,10 @@ body{
 }
 
 .span_unreachable{
-	color:red;
-	display:none;
-	margin-left: 5px;
-	margin-right: 5px;
+	color: red;
+	display: none;
+	margin-left: 15px;
+	margin-right: 15px;
 }
 .btn_refresh{
 	width: 1rem;

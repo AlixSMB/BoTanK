@@ -8,6 +8,10 @@ let uniqueid = (function(){
 
 function resetNodesVals(nodes) { nodes.forEach(node => node.value = node.getAttribute('oldvalue')); }
 function updateNodesVals(nodes){ nodes.forEach(node => node.setAttribute('oldvalue', node.value)); }
+function setNodesVals(nodes, vals){ nodes.forEach((node,ind) => {
+	node.value = vals[ind];
+	node.setAttribute('oldvalue', vals[ind]);
+}); }
 let html_inputzone = (on_ok, n=1, values=null, attrs=null, sep="<b>;</b>") => {
 	let inputs = [...Array(n).keys()].map(ind => 
 		`<input 
@@ -24,6 +28,7 @@ let html_inputzone = (on_ok, n=1, values=null, attrs=null, sep="<b>;</b>") => {
 				<input type="image" src="res/check.png" class="btn_ok" onclick="
 					let nodes = getdom('input', this.parentNode.parentNode).splice(0, ${n});
 					${on_ok}(nodes);
+					updateNodesVals(nodes);
 					this.parentNode.style.display = 'none';
 				"></input>
 				<input type="image" src="res/cancel.png" class="btn_cancel" onclick="
@@ -94,8 +99,9 @@ class Tank{
 		getdom(`.span_unreachable[tankid="${this.id}"]`)[0].style.display = on ? 'inline' : 'none';
 	}
 	
-	setData(path, data, on_ok, on_errcode, on_errnet, isloop){
+	setData(path, data, on_ok, on_errcode, on_errnet, on_netstop, isloop){
 		if (this.netstop){
+			on_netstop();
 			if (isloop) this.netloops--; 
 			return;
 		}
@@ -115,41 +121,47 @@ class Tank{
 			this.toggleNeterror(true);
 		});
 	}
-	setVec2d(x, y, parts, msg=false, callback=null, isloop=false, nodes=null){
+	setVec2d(parts, x, y, msg=false, callback=null, isloop=false, nodes=null){
 		let path = '/'+parts.join('/');
+		let obj = this[parts[0]][parts[1]][parts[2]];
 		this.setData(
 			path, `${x.toFixed(1)};${y.toFixed(1)}`, 
 			() => {
-				let obj = this[parts[0]][parts[1]][parts[2]];
-				[obj.x, obj.y] = [x, y];
-				if (nodes !== null) updateNodesVals(nodes);
+				[obj[0], obj[1]] = [x, y];
 				if (msg) this.dispmsg(`${path} set to (${x};${y})`);
 				if (callback !== null) callback();
 			}, 
 			(code, status) => {
-				if (nodes !== null) resetNodesVals(nodes);
-				self.dispmsg(`error setting ${path} (${code} ${status})`);
+				if (nodes !== null) setNodesVals(nodes, obj);
+				this.dispmsg(`error setting ${path} (${code} ${status})`);
 			},
 			err => {
-				if (nodes !== null) resetNodesVals(nodes);
-				self.dispmsg(`error setting ${path} (${err})`);
+				if (nodes !== null) setNodesVals(nodes, obj);
+				this.dispmsg(`error setting ${path} (${err})`);
 			},
+			() => { if (nodes !== null) setNodesVals(nodes, obj); },
 			isloop
 		);
 	}
 	setBool(parts, on, msg=false, node=null){
 		let path = '/'+parts.join('/');
+		let obj = this[parts[0]][parts[1]];
 		this.setData(
-			path + on ? '/on' : '/off', ''
+			path + (on ? '/on' : '/off'), '',
 			() => {
-				this[parts[0]][parts[1]].on = on;
-				if (msg) self.dispmsg(`${parts} set to ${on ? 'enabled' : 'disabled'}`);
+				obj.on = on;
+				if (msg) this.dispmsg(`${path} set to ${on ? 'enabled' : 'disabled'}`);
 			}, 
 			(code, status) => {
-				if (node !== null) node.checked = this[parts[0]][parts[1]].on;
-				self.dispmsg(`error setting ${parts} (${code} ${status})`);
+				if (node !== null) node.checked = obj.on;
+				this.dispmsg(`error setting ${path} (${code} ${status})`);
 			},
-			(err, self) => self.dispmsg(`error setting ${parts} (${err})`)
+			err => {
+				if (node !== null) node.checked = obj.on;
+				this.dispmsg(`error setting ${path} (${err})`);
+			},
+			() => { if (node !== null) node.checked = obj.on; },
+			false
 		);
 	}
 	
@@ -186,7 +198,7 @@ class Tank{
 				try{
 					let [x,y] = txt.split(";");
 					let obj = this[parts[0]][parts[1]][parts[2]];
-					[obj.x, obj.y] = [Number(x), Number(y)]; 
+					[obj[0], obj[1]] = [Number(x), Number(y)]; 
 					if (msg) this.dispmsg(`${path} is (${x};${y})`); 
 					if (callback !== null) callback();
 				}
@@ -222,7 +234,7 @@ class Tank{
 	getPosLoop(){ this.getVec2d(['move', 'real', 'pos'], false, () => this.getPosLoop(), true); }
 	getDirLoop(){ this.getVec2d(['move', 'real', 'dir'], false, () => this.getDirLoop(), true); }
 	
-	getAll(callback){
+	getAll(callback=null){
 		this.netstop = true; // stop the running loops 
 		let id = window.setInterval(() => {
 			if (this.netloops == 0){
@@ -234,19 +246,23 @@ class Tank{
 				this.netloops++; this.getDirLoop();
 				
 				window.clearInterval(id);
-				callback();
+				if (callback !== null) callback();
 			}
 		}, 100);
 	}
 	
 	refresh(){
 		this.toggleNeterror(false);
+		this.dispmsg('refreshing connection...');
+		
+		// refresh video stream
+		getdom(`img[tankid="${this.id}"]`)[0].src = `http://${this.addr}:8080/video/mjpeg?t=${new Date().getTime()}`;
 		
 		// set values
-		//getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).forEach(el => el.click());
-		//getdom(`.div_tank[tankid="${this.id}"] .check_com`).forEach(el => el.onchange());
+		getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).forEach(el => el.click());
+		getdom(`.div_tank[tankid="${this.id}"] .check_com`).forEach(el => el.onchange());
 		// get values
-		this.getAll( ()=>this.dispmsg('connection refreshed') );
+		this.getAll();
 	}
 	
 	draw(){
@@ -294,8 +310,8 @@ let tankfromid = id => tanks.find(tank => tank.id == id)
 let tankfromnode = node => tankfromid( Number(node.getAttribute('tankid')) );
 
 function in_tankaddr(nodes){ tankfromnode(nodes[0]).setAddr(nodes[0].value); }
-function in_targetpos(nodes){ tankfromnode(nodes[0]).setTargetpos(nodes, Number(nodes[0].value), Number(nodes[1].value)); }
-function toggle_auto(node, type){ tankfromnode(node).toggleAuto(node, node.checked, type); }
+function in_targetpos(nodes){ tankfromnode(nodes[0]).setVec2d(['move', 'auto', 'target'], Number(nodes[0].value), Number(nodes[1].value), true, null, false, nodes); }
+function toggle_auto(node, type){ tankfromnode(node).setBool([type, 'auto'], node.checked, true, node); }
 function toggle_camerafeed(node){ getdom('img', node.parentNode)[0].style.display = node.checked ? 'block' : 'none'; }
 
 
@@ -309,5 +325,5 @@ window.setInterval(loop, 1000/fps)
 
 /*
 TODO:
-
+	- fix video stream refresh
 */
