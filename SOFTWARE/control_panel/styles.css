@@ -5,7 +5,7 @@ html{
 	margin: none;
 }
 div, canvas{
-	/*border: 1px solid black;*/
+	border: 1px solid black;
 }
 body{
 	/*position: absolute;*/
@@ -18,6 +18,12 @@ body{
 	justify-content: space-between;
 }
 
+.span_unreachable{
+	color:red;
+	display:none;
+	margin-left: 5px;
+	margin-right: 5px;
+}
 .btn_refresh{
 	width: 1rem;
 	float: right;
