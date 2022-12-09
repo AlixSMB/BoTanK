@@ -2,7 +2,7 @@
 
 let getdom = (str, el=document) => [...el.querySelectorAll(str)];
 let uniqueid = (function(){
-	let tmp = 0;
+	let tmp = -1;
 	return function(){ return ++tmp; }
 })();
 
@@ -19,7 +19,7 @@ let html_inputzone = (on_ok, n=1, values=null, attrs=null, sep="<b>;</b>") => {
 			${ attrs === null ? "" : attrs[ind] } 
 			${ values === null ? "value='' oldvalue=''" : `value="${values[ind]}" oldvalue="${values[ind]}"` } 
 			oninput="getdom('div', this.parentNode)[0].style.display = 'inline';"
-		></input>`
+		>`
 	).join(sep);
 	
 	return `<div class="div_inputzone" style="display:inline;">
@@ -30,17 +30,34 @@ let html_inputzone = (on_ok, n=1, values=null, attrs=null, sep="<b>;</b>") => {
 					${on_ok}(nodes);
 					updateNodesVals(nodes);
 					this.parentNode.style.display = 'none';
-				"></input>
+				">
 				<input type="image" src="res/cancel.png" class="btn_cancel" onclick="
 					resetNodesVals( getdom('input', this.parentNode.parentNode).splice(0, ${n}) );
 					this.parentNode.style.display = 'none';
-				"></input>
+				">
 			</div>
 		</div>
 	`;
 };
+let html_radiozone = (on_click, name, values, checked=0, zoneattr='', attrs=null) => {
+	let radios = [...Array(values.length).keys()].map(ind => 
+		`<input 
+			type="radio" name="${name}" value="${values[ind]}"
+			${ attrs === null ? "" : attrs[ind] } 
+			${ checked == ind ? "checked" : "" } 
+			onclick="${on_click}(this.parentNode, this.value);"
+		>${values[ind]}`
+	).join(' ');
+	
+	return `<div class="div_radiozone" style="display:inline;" oldvalue="${values[checked]}" ${zoneattr}>${radios}</div>`;
+};
+function update_radiozone(nodezone){ nodezone.setAttribute( 'oldvalue', getdom('input[checked]', nodezone)[0].value ); }
+function revert_radiozone(nodezone){ getdom(`input`, nodezone).find(node => node.value == nodezone.getAttribute('oldvalue')).checked = true; }
 
 let msgconsole = getdom('#div_msg')[0];
+function dispmsgGamepad(ind, msg){
+	msgconsole.innerHTML += `<br>GAMEPAD&lt;${ind}&gt; <b>::</b> ${msg}`;
+}
 
 let canvas = getdom('canvas')[0];
 let canvasW = canvas.width; let canvasH = canvas.height;
@@ -87,11 +104,16 @@ class Tank{
 		this.path.lineTo(base/2, 0);
 		this.path.lineTo(0, height);
 		this.path.closePath();
+		
+		this.gamepad = {
+			on: false,
+			ind: this.id
+		};
 	}
 	
 	setAddr(addr){
 		this.addr = addr;
-		getdom(`img[tankid="${this.id}"]`)[0].src = `http://${this.addr}:8080/video/mjpeg`;
+		getdom(`img[tankid="${this.id}"]`)[0].src = `http://${this.addr}:8080/video/mjpeg?t=${new Date().getTime()}`; // date is necessary to refresh the video stream
 	}
 	
 	toggleNeterror(on){
@@ -151,16 +173,17 @@ class Tank{
 			() => {
 				obj.on = on;
 				if (msg) this.dispmsg(`${path} set to ${on ? 'enabled' : 'disabled'}`);
+				if (node != null) update_radiozone(node);
 			}, 
 			(code, status) => {
-				if (node !== null) node.checked = obj.on;
+				if (node !== null) revert_radiozone(node);
 				this.dispmsg(`error setting ${path} (${code} ${status})`);
 			},
 			err => {
-				if (node !== null) node.checked = obj.on;
+				if (node !== null) revert_radiozone(node);
 				this.dispmsg(`error setting ${path} (${err})`);
 			},
-			() => { if (node !== null) node.checked = obj.on; },
+			() => { if (node !== null) revert_radiozone(node); },
 			false
 		);
 	}
@@ -255,14 +278,18 @@ class Tank{
 		this.toggleNeterror(false);
 		this.dispmsg('refreshing connection...');
 		
-		// refresh video stream
-		getdom(`img[tankid="${this.id}"]`)[0].src = `http://${this.addr}:8080/video/mjpeg?t=${new Date().getTime()}`;
-		
 		// set values
 		getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).forEach(el => el.click());
-		getdom(`.div_tank[tankid="${this.id}"] .check_com`).forEach(el => el.onchange());
+		getdom(`.div_tank[tankid="${this.id}"] .div_radiozone input[checked]`).forEach(el => el.click());
 		// get values
 		this.getAll();
+	}
+	
+	connectGamepad(gamepad){
+		this.gamepad = gamepad;
+	}
+	disconnectGamepad(){
+		this.gamepad = null;
 	}
 	
 	draw(){
@@ -287,16 +314,30 @@ function addTank(){
 	getdom('#div_tanks')[0].innerHTML += `
 		<div class="div_tank" ${tankidattr}>
 			<div>
-				<b>Tank</b> ${html_inputzone("in_tankaddr", 1, [tank.addr], [tankidattr+" size=6"])} <span class="span_unreachable" ${tankidattr}>unreachable</span>
+				<span style="color:${tank.color};"><b>Tank</b></span> ${html_inputzone("in_tankaddr", 1, [tank.addr], [tankidattr+" size=6"])} <span class="span_unreachable" ${tankidattr}>unreachable</span>
 				<input type="image" src="res/sync.png" onclick="tankfromid(${tank.id}).refresh()" class="btn_refresh"></input>
-			</div>
-			<input type="checkbox" onchange="toggle_auto(this, 'move');" checked="${tank.move.auto.on}" class="check_com" ${tankidattr}></input>Auto move<br>
-			<input type="checkbox" onchange="toggle_auto(this, 'cannon');" checked="${tank.cannon.auto.on}" class="check_com" ${tankidattr}></input>Auto aim
+			</div><br>
+			<details>
+				<summary>Movement</summary>
+				Mode: ${html_radiozone("toggle_mode_move", "radio_movemode", ["manual", "auto"], tank.move.auto.on ? 1 : 0, tankidattr)}
+				<div>
+					Target pos.: ${html_inputzone(
+						"in_targetpos", 2, 
+						[tank.move.com.pos[0].toFixed(1), tank.move.com.pos[0].toFixed(1)],
+						[tankidattr+" size=2", tankidattr+" size=2"]
+					)}
+				</div>
+			</details>
+			<details>
+				<summary>Cannon</summary>
+				Mode: ${html_radiozone("toggle_mode_cannon", "radio_cannonmode", ["manual", "auto"], tank.cannon.auto.on ? 1 : 0, tankidattr)}
+			</details><br>
 			<div>
-				Target pos.: ${html_inputzone(
-					"in_targetpos", 2, 
-					[tank.move.com.pos[0].toFixed(1), tank.move.com.pos[0].toFixed(1)],
-					[tankidattr+" size=2", tankidattr+" size=2"]
+				<input type="checkbox" onchange="toggle_gamepad(this);" checked="${tank.gamepad.on}" ${tankidattr}>
+				Gamepad ${html_inputzone(
+					"in_gamepadind", 1, 
+					[tank.gamepad.ind],
+					[tankidattr+" size=1"]
 				)}
 			</div>
 			<div>
@@ -310,8 +351,19 @@ let tankfromid = id => tanks.find(tank => tank.id == id)
 let tankfromnode = node => tankfromid( Number(node.getAttribute('tankid')) );
 
 function in_tankaddr(nodes){ tankfromnode(nodes[0]).setAddr(nodes[0].value); }
+function in_gamepadind(nodes){  
+	try{
+		tankfromnode(nodes[0]).connectGamepad( navigator.getGamepads()[Number(nodes[0].value)] );
+	}
+	catch{
+		dispmsgGamepad(Number(nodes[0].value), 'not connected');
+	}
+}
 function in_targetpos(nodes){ tankfromnode(nodes[0]).setVec2d(['move', 'auto', 'target'], Number(nodes[0].value), Number(nodes[1].value), true, null, false, nodes); }
-function toggle_auto(node, type){ tankfromnode(node).setBool([type, 'auto'], node.checked, true, node); }
+function toggle_mode_move(nodezone, value)  { tankfromnode(nodezone).setBool(['move', 'auto']  , value == 'auto', true, nodezone); }
+function toggle_mode_cannon(nodezone, value){ tankfromnode(nodezone).setBool(['cannon', 'auto'], value == 'auto', true, nodezone); }
+function toggle_gamepad(node){}
+function in_gamepadind(node){}
 function toggle_camerafeed(node){ getdom('img', node.parentNode)[0].style.display = node.checked ? 'block' : 'none'; }
 
 
@@ -323,7 +375,18 @@ function loop(){
 window.setInterval(loop, 1000/fps)
 
 
+window.addEventListener("gamepadconnected", ev => {
+	dispmsgGamepad(ev.gamepad.index, 'connected')
+});
+window.addEventListener("gamepaddisconnected", ev => {
+	dispmsgGamepad(ev.gamepad.index, 'disconnected');
+	let tank = tanks.find(tank => tank.gamepad !== null && tank.gamepad.index == ev.gamepad.index);
+	if (tank) tank.disconnectGamepad();
+});
+
 /*
 TODO:
-	- fix video stream refresh
+	- replace http requests loops with http streams
+	- remove </input> elements
+
 */

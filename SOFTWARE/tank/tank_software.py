@@ -162,6 +162,11 @@ data = {
 	}	
 };
 
+def rotate_wheels(vel):
+	pass
+	#robot.left(vel[0]);
+	#robot.right(vel[0]);
+
 set_timer('sockalive', 0.5) # might be unnecessary, but may help performance
 #set_timer('sockconnect', 0.1)
 while True:
@@ -173,6 +178,9 @@ while True:
 	_, camera_frame = vid.read()
 	camera_jpegbytes = cv2.imencode('.jpeg', camera_frame)[1].tobytes()
 	#cv2.imshow('videostream', camera_frame)
+	
+	# apply speed
+	rotate_wheels( data['move']['com']['vel'] )
 	
 	# compute tank pos, speed
 	
