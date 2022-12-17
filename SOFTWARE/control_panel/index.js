@@ -6,6 +6,7 @@ let uniqueid_gen = function(){
 	return function(){ return ++tmp; }
 };
 let uniqueids = [uniqueid_gen(), uniqueid_gen()];
+let noop = ()=>{};
 
 function resetNodesVals(nodes) { nodes.forEach(node => node.value = node.getAttribute('oldvalue')); }
 function updateNodesVals(nodes){ nodes.forEach(node => node.setAttribute('oldvalue', node.value)); }
@@ -66,12 +67,12 @@ let ctx = canvas.getContext('2d');
 ctx.scale(1, -1);           // set y axis pointing up
 ctx.translate(0, -canvasH); // origin at bottom left
 
-let tanks = [];
 class Loop{
-	constructor(fun, types=[]){
+	constructor(fun, on_stop, types=[]){
 		this.id = uniqueids[1];
 		this.fun = fun;
 		this.types = types;
+		this.on_stop = on_stop;
 		this.stop = false;
 	}
 	addToPool(pool){
@@ -80,8 +81,23 @@ class Loop{
 			pool[type][this.id] = this;
 		});
 		pool[ids][this.id] = this;
+		return this;
 	}
+	delFromPool(pool){
+		this.types.forEach(type => delete pool[type][this.id]);
+		delete pool[ids][this.id];
+		return this;
+	}
+	stop(){
+		if (this.stop) return this; // already stopped
+		
+		this.on_stop();
+		this.stop = true;
+		return this;
+	}
+	rec(){ if (!this.stop) this.fun(this); }
 }
+let tanks = [];
 class Tank{
 	static colors = ['red', 'green', 'blue', 'orange', 'purple'];
 	
@@ -109,11 +125,9 @@ class Tank{
 		};
 		
 		this.id = uniqueids[0]();
-		this.addr = addr;
-		this.getloops = 0;
-		this.setloops = 0;
-		this.netstop = false;
+		
 		this.net = {
+			addr: addr,
 			stop: false,
 			loops: {}
 		};
@@ -130,50 +144,59 @@ class Tank{
 			on: false,
 			ind: this.id,
 			obj: null,
-			netloops: 0
 		};
 	}
 	
 	setAddr(addr){
-		this.addr = addr;
-		getdom(`img[tankid="${this.id}"]`)[0].src = `http://${this.addr}:8080/video/mjpeg?t=${new Date().getTime()}`; // date is necessary to refresh the video stream
+		this.net.addr = addr;
+		getdom(`img[tankid="${this.id}"]`)[0].src = `http://${this.net.addr}:8080/video/mjpeg?t=${new Date().getTime()}`; // date is necessary to refresh the video stream
 	}
-	
 	toggleNeterror(on){
-		this.netstop = on;
+		this.net.stop = on;
 		getdom(`.span_unreachable[tankid="${this.id}"]`)[0].style.display = on ? 'inline' : 'none';
 	}
+	stopLoop(loop){
+		loop.delFromPool(this.net.loops);
+		loop.stop();
+	}
+	stopLoops(types=[]){
+		if (types.length == 0) Object.values(this.net.loops.ids).forEach(loop => this.stopLoop(loop)); // stop all loops
+		else                   [...new Set(types.forEach(type => Object.values(this.net.loops[type])).flat())].forEach(loop => this.stopLoop(loop)); 
+	}
 	
-	setData(path, data, on_ok, on_errcode, on_errnet, on_netstop, isloop){
-		if (this.netstop){
+	setData(path, data, on_ok, on_errcode, on_errnet, on_netstop, loop=null){
+		if (this.net.stop){
 			on_netstop();
-			if (isloop) this.setloops--; 
+			if (loop !== null) this.stopLoop(loop); 
 			return;
 		}
 		
 		fetch(`http://${this.addr}:8081${path}`, {method: 'PUT', body: data})
 		.then(res => {
-			if (res.ok) on_ok();
+			if (res.ok){
+				on_ok();
+				if (loop !== null) loop.rec();
+			}
 			else{
-				if (isloop) this.netloops--;
+				if (loop !== null) this.stopLoop(loop);
 				on_errcode(res.status, res.statusText);
 				//this.toggleNeterror(true);
 			}
 		})
 		.catch(err => {
-			if (isloop) this.netloops--;
+			if (loop !== null) this.stopLoop(loop);
 			on_errnet(err);
 			this.toggleNeterror(true);
 		});
 	}
-	setVec2d(parts, x, y, msg=false, callback=null, isloop=false, nodes=null){
+	setVec2dFromInput(parts, x, y, nodes){
 		let path = '/'+parts.join('/');
 		let obj = this[parts[0]][parts[1]][parts[2]];
 		this.setData(
 			path, `${x.toFixed(1)};${y.toFixed(1)}`, 
 			() => {
 				[obj[0], obj[1]] = [x, y];
-				if (msg) this.dispmsg(`${path} set to (${x};${y})`);
+				this.dispmsg(`${path} set to (${x};${y})`);
 				if (callback !== null) callback();
 			}, 
 			(code, status) => {
@@ -184,8 +207,19 @@ class Tank{
 				if (nodes !== null) setNodesVals(nodes, obj);
 				this.dispmsg(`error setting ${path} (${err})`);
 			},
-			() => { if (nodes !== null) setNodesVals(nodes, obj); },
-			isloop
+			() => { if (nodes !== null) setNodesVals(nodes, obj); }
+		);
+	}
+	setVec2dFromLoop(parts, x, y, loop){
+		let path = '/'+parts.join('/');
+		let obj = this[parts[0]][parts[1]][parts[2]];
+		this.setData(
+			path, `${x.toFixed(1)};${y.toFixed(1)}`, 
+			() => [obj[0], obj[1]] = [x, y], 
+			(code, status) => this.dispmsg(`error setting ${path} (${code} ${status})`),
+			err => this.dispmsg(`error setting ${path} (${err})`),
+			noop,
+			loop
 		);
 	}
 	setBool(parts, on, msg=false, node=null){
@@ -206,37 +240,40 @@ class Tank{
 				if (node !== null) revert_radiozone(node);
 				this.dispmsg(`error setting ${path} (${err})`);
 			},
-			() => { if (node !== null) revert_radiozone(node); },
-			false
+			() => { if (node !== null) revert_radiozone(node); }
 		);
 	}
 	
-	getData(path, on_ok, on_errcode, on_errnet, isloop){
-		if (this.netstop){
-			if (isloop) this.getloops--; 
+	getData(path, on_ok, on_errcode, on_errnet, on_netstop, loop=null){
+		if (this.net.stop){
+			on_netstop();
+			if (loop !== null) this.stopLoop(loop); 
 			return;
 		}
 		
 		fetch(`http://${this.addr}:8081${path}`, {method: 'GET'})
 		.then(res => {
-			if (res.ok) res.text().then(txt => on_ok(txt)).catch(err => {
-				if (isloop) this.netloops--;
-				on_errnet(err); 
-				this.toggleNeterror(true);
-			});
+			if (res.ok) res.text().then(txt => {
+					on_ok(txt);
+					if (loop !== null) loop.rec();
+				}).catch(err => {
+					if (loop !== null) this.stopLoop(loop);
+					on_errnet(err); 
+					this.toggleNeterror(true);
+				});
 			else{
-				if (isloop) this.netloops--;
+				if (loop !== null) this.stopLoop(loop);
 				on_errcode(res.status, res.statusText);
 				this.toggleNeterror(true);
 			}
 		})
 		.catch(err => {
-			if (isloop) this.netloops--;
+			if (loop !== null) this.stopLoop(loop);
 			on_errnet(err);
 			this.toggleNeterror(true);
 		});
 	}
-	getVec2d(parts, msg=false, callback=null, isloop=false){
+	getVec2d(parts, msg=false, loop=null){
 		let path = '/'+parts.join('/');
 		this.getData(
 			path, 
@@ -246,13 +283,13 @@ class Tank{
 					let obj = this[parts[0]][parts[1]][parts[2]];
 					[obj[0], obj[1]] = [Number(x), Number(y)]; 
 					if (msg) this.dispmsg(`${path} is (${x};${y})`); 
-					if (callback !== null) callback();
 				}
 				catch (err){ this.dispmsg(`error getting ${path} (${err})`); }
 			}, 
 			(code, status) => this.dispmsg(`error getting ${path} (${code} ${status})`),
 			err            => this.dispmsg(`error getting ${path} (${err})`),
-			isloop
+			noop,
+			loop
 		);
 	}
 	getBool(parts, msg=false){
@@ -272,82 +309,48 @@ class Tank{
 			}, 
 			(code, status) => this.dispmsg(`error getting ${path} (${code} ${status})`),
 			err            => this.dispmsg(`error getting ${path} (${err})`),
-			false
+			noop
 		);
 	}
 	
 	// sends new request once the answer to the previous one arrives
 	// HTTP1.1 connections are "keep alive" by default so this should be fine in terms of latency 
-	getLoop(rec){
-		this.getloops++;
-		rec(rec);
-	}
-	getPosLoop(){ this.getLoop( rec => this.getVec2d(['move', 'real', 'pos'], false, () => rec(), true) ) }
-	getDirLoop(){ this.getLoop( rec => this.getVec2d(['move', 'real', 'dir'], false, () => rec(), true) ) }
-	
-	gamepadVelLoop(stop, getXY){
-		if (!this.gamepad.on || this.gamepad.obj === null){
-			this.gamepad.netloops--;
-			return; // stop loop
-		}
-		
-		let [x, y] = [this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]];
-		
-		this.setData(
-			'/move/com/vel', `${x.toFixed(1)};${y.toFixed(1)}`, 
-			() => {
-				[this.move.com.vel[0], this.move.com.vel[1]] = [x, y];
-				if (msg) this.dispmsg(`${path} set to (${x};${y})`);
-				this.gamepadVelLoop(stop, getXY);
-			}, 
-			(code, status) => this.gamepad.netloops--;,
-			err => this.gamepad.netloops--;,
-			() => this.gamepad.netloops--;,
-			true
-		);
-		
-		this.setVec2d(['move', 'com', 'vel'], x, y, false, () => this.setVelLoop(getXY, cont), true);
-	}
-	
-	getAll(callback=null){
-		this.netstop = true; // stop the running loops 
-		let id = window.setInterval(() => {
-			if (this.getloops == 0){
-				this.netstop = false;
-				
-				this.getBool( ['move', 'auto'] );
-				this.getBool( ['cannon', 'auto'] );
-				this.getPosLoop();
-				this.getDirLoop();
-				
-				window.clearInterval(id);
-				if (callback !== null) callback();
+	getLoop(fun){ new Loop(fun, noop, ['GET']).addToPool(this.net.loops).rec(); }
+	getPosLoop(){ this.getLoop( loop => this.getVec2d(['move', 'real', 'pos'], false, loop) ) }
+	getDirLoop(){ this.getLoop( loop => this.getVec2d(['move', 'real', 'dir'], false, loop) ) }
+	gamepadLoop(fun){ new Loop(fun, noop, ['SET','gamepad']).addToPool(this.net.loops).rec(); }
+	gamepadVelLoop(){
+		this.gamepadLoop(loop => {
+			if (!this.gamepad.on || this.gamepad.obj === null) loop.stop();
+			else {
+				let [x, y] = [this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]];
+				this.setVec2dFromLoop(['move', 'com', 'vel'], x, y, loop);
 			}
-		}, 100);
+		});
 	}
+	
 	
 	refresh(){
 		this.toggleNeterror(false);
 		this.dispmsg('refreshing connection...');
 		
+		// stop all loops
+		this.stopLoops();
 		// set values
 		getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).forEach(el => el.click());
 		getdom(`.div_tank[tankid="${this.id}"] .div_radiozone input[checked]`).forEach(el => el.click());
 		// get values
-		this.getAll();
+		this.getBool( ['move', 'auto'] );
+		this.getBool( ['cannon', 'auto'] );
+		this.getPosLoop();
+		this.getDirLoop();
 	}
 	
 	toggleGamepad(on){
 		this.gamepad.on = on;
-		
-		if (on && this.gamepad.obj !== null && ...check loops...){
-			this.gamepad.loop = true;
-			this.setVelLoop(
-				()=>{
-					
-				}, 
-				() => [this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]]
-			);
+		if (on && this.gamepad.obj !== null){ // start gamepad loops
+			this.stopLoops(['gamepad']);
+			this.gamepadVelLoop();
 		}
 	}
 	connectGamepad(gamepad){
@@ -380,7 +383,7 @@ function addTank(){
 	getdom('#div_tanks')[0].innerHTML += `
 		<div class="div_tank" ${tankidattr}>
 			<div>
-				<span style="color:${tank.color};"><b>Tank</b></span> ${html_inputzone("in_tankaddr", 1, [tank.addr], [tankidattr+" size=6"])} <span class="span_unreachable" ${tankidattr}>unreachable</span>
+				<span style="color:${tank.color};"><b>Tank</b></span> ${html_inputzone("in_tankaddr", 1, [tank.net.addr], [tankidattr+" size=6"])} <span class="span_unreachable" ${tankidattr}>unreachable</span>
 				<input type="image" src="res/sync.png" onclick="tankfromid(${tank.id}).refresh()" class="btn_refresh"></input>
 			</div><br>
 			<details>
@@ -417,7 +420,7 @@ let tankfromid = id => tanks.find(tank => tank.id == id)
 let tankfromnode = node => tankfromid( Number(node.getAttribute('tankid')) );
 
 function in_tankaddr(nodes){ tankfromnode(nodes[0]).setAddr(nodes[0].value); }
-function in_targetpos(nodes){ tankfromnode(nodes[0]).setVec2d(['move', 'auto', 'target'], Number(nodes[0].value), Number(nodes[1].value), true, null, false, nodes); }
+function in_targetpos(nodes){ tankfromnode(nodes[0]).setVec2dFromInput(['move', 'auto', 'target'], Number(nodes[0].value), Number(nodes[1].value), nodes); }
 function toggle_mode_move(nodezone, value)  { tankfromnode(nodezone).setBool(['move', 'auto']  , value == 'auto', true, nodezone); }
 function toggle_mode_cannon(nodezone, value){ tankfromnode(nodezone).setBool(['cannon', 'auto'], value == 'auto', true, nodezone); }
 function toggle_gamepad(node){ tankfromnode(node).toggleGamepad(node.checked); }
