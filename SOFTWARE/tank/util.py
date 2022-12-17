@@ -1,6 +1,20 @@
 import socket
 import httptools
 import time
+from hashlib import sha1
+from base64 import b64encode
+
+from ctypes import CDLL, Structure, POINTER, c_ubyte, c_uint, c_ulonglong
+CProg = CDLL('./ws_framing.dll')
+CProg.decode_frame.argtypes = [POINTER(c_ubyte)]
+class C_Frame(Structure):
+	_fields_ = [
+		('start', c_ulonglong),
+		('len', c_ulonglong),
+		('fin', c_ubyte),
+		('type', c_ubyte)
+	]
+CProg.decode_frame.restype = C_Frame
 
 
 def partial(fun, *args1):
@@ -44,7 +58,7 @@ class TCPServer:
 	def __init__(self, port):
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.sock.bind(('', port))
-		self.sock.listen() # only connect with control panel
+		self.sock.listen() 
 		self.sock.setblocking(0)
 		self.remotes = {}
 		
@@ -89,7 +103,7 @@ class HttpParserHandler:
 		self.headers = {}
 		self.url = None
 		self.method = None
-		self.body = None
+		self.body = bytes()
 	
 	# httptools callbacks
 	def on_url(self, url):
@@ -100,38 +114,74 @@ class HttpParserHandler:
 	def on_header(self, name, value):
 		self.headers[name] = value 
 	def on_body(self, body):
-		self.body = body
+		self.body += body
+class WSParser:
+	def __init__(self):
+		self.reset()
+	
+	def reset(self):
+		self.connected = False
+		self.complete = False
+		self.msg = bytes()
+		self.close = False
+		
+	def check_upgrade(self, server, addr):
+		parser = server.protocols[addr]['http']
+		if (b'Connection' in parser.headers and parser.headers[b'Connection'] == b'Upgrade' and
+			b'Upgrade' in parser.headers and parser.headers[b'Upgrade'] == b'websocket'):
+			
+			self.connected = True
+			server.sendraw(bytes(
+				"HTTP/1.1 101 Switching Protocols\r\n" +
+				"Upgrade: websocket\r\n" +
+				"Connection: Upgrade\r\n" +
+				f"Sec-WebSocket-Accept: { b64encode(hash(parser.headers[b'Sec-WebSocket-Key']+'258EAFA5-E914-47DA-95CA-C5AB0DC85B11')) }\r\n\r\n"
+			,'utf-8'), addr)
+			return True
+		return False
+	def parseframe(self, data):
+		frame = decode_frame(data)
+		if frame.type == 0x8: # close connection
+			self.close = True
+		else:
+			self.complete = False if frame.fin == 0 else True
+			self.msg += data[frame.start:frame.len]
+	
 class HTTPServer:
 	def __init__(self, port, on_close=noop):
 		self.con = TCPServer(port)
-		self.parsers = {}
+		self.protocols = {}
 		
 		self.on_close = on_close
 	
 	def connect(self):
 		addr = self.con.connect()
-		if addr is not None : self.parsers[addr] = HttpParserHandler()
+		if addr is not None : self.protocols[addr] = {'http': HttpParserHandler(), 'ws': WSParser()}
 	def close(self, addr):
-		del self.parsers[addr]
+		del self.protocols[addr]
 		self.con.disconnect(addr)
 		self.on_close(addr)
 	
 	def read(self, addr):
 		data = self.con.recv(addr)
+		protocol = self.protocols[addr]
+		
 		if data is not None:
-			self.parsers[addr].parser.feed_data(data)
-			return True
+			if protocol['ws'].connected : protocol.parseframe(data)
+			else: # http
+				if not protocol['ws'].check_upgrade(self, addr): 
+					self.protocols[addr]['http'].parser.feed_data(data)
+					return True
+				else : return False
 		else:
 			return False
-	def readfull(self, addr):
-		return self.read(addr) and self.parsers[addr].complete
 	
 	def sendraw(self, data, addr):
 		sent = self.con.send(data, addr)
 		if sent is None: # disconnect
 			self.close(addr)
-			return None
-		else : return sent
+			return False
+		else : return True
 
 
 def http_empty(code, status):

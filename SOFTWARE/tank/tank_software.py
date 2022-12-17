@@ -50,7 +50,7 @@ def httpserv_sendvec2d(serv, addr, vec):
 	), addr)
 def httpserv_recvvec2d(serv, addr):
 	try:
-		x, y = serv.parsers[addr].body.decode('utf-8').split(';')
+		x, y = serv.protocols[addr]['http'].body.decode('utf-8').split(';')
 	except:
 		serv.sendraw(http_empty(400, 'BAD VALUES'), addr)
 		return None
@@ -59,8 +59,10 @@ def httpserv_recvvec2d(serv, addr):
 		return [float(x), float(y)]
 
 def localcam_onmsg(self, addr):
-	if self.serv.readfull(addr): # we parsed the full request
-		parser = self.serv.parsers[addr]
+	if self.serv.read(addr): # we parsed the full request
+		parser = self.serv.protocols[addr]['http']
+		if not parser.complete : return
+		
 		if parser.url.find(b'/video/mjpeg') == 0 and parser.method == b'GET':
 			sent = self.serv.sendraw(bytes(
 				'HTTP/1.1 200 OK\r\n' +
@@ -72,6 +74,8 @@ def localcam_onmsg(self, addr):
 				set_timer('localcamfps', 1/20)
 		else:
 			self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
+		
+		parser.reset()
 	
 	if addr in self.data['streams'] and check_timer('localcamfps'):
 		self.serv.sendraw(
@@ -84,41 +88,54 @@ def localcam_onmsg(self, addr):
 			bytes("\r\n",'utf-8')
 		, addr)
 def coms_onmsg(self, addr):
-	if self.serv.readfull(addr): # we parsed the full request
-		parser = self.serv.parsers[addr]
-		path = [part.decode('utf-8') for part in parser.url.split(b'/')[1:]]
+	if self.serv.read(addr): 
+		protocol = self.serv.protocols[addr]
 		
-		if parser.method == b'GET':
+		if protocol['ws'].connected: # WS
+			parser = protocol['ws']
+			if not parser.complete : return
 			
-			try:
-				if path[-1] == 'on':
-					self.serv.sendraw(http_txtresp(
-						200, 'OK', bytes('1' if data[path[0]][path[1]]['on'] else '0', 'utf-8')
-					), addr)
-				else:
-					httpserv_sendvec2d(self.serv, addr, data[path[0]][path[1]][path[2]])
-			except:
-				self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
-		
-		elif parser.method == b'PUT':
 			
-			try:
-				if path[-1] == 'on':
-					data[path[0]][path[1]]['on'] = True
-					self.serv.sendraw(http_empty(204, 'OK'), addr)
-				elif path[-1] == 'off':
-					data[path[0]][path[1]]['on'] = False
-					self.serv.sendraw(http_empty(204, 'OK'), addr)
-				else:
-					res = httpserv_recvvec2d(self.serv, addr)
-					if res is not None: data[path[0]][path[1]][path[2]] = res
-			except:
-				self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
 			
-		elif parser.method == b'OPTIONS': 
-			self.serv.sendraw(bytes('HTTP/1.1 204 OK\r\nAccess-Control-Allow-Methods: OPTIONS, GET, PUT\r\nAccess-Control-Allow-Origin: *\r\n\r\n', 'utf-8'), addr)
-		
-		else : self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
+		else: # HTTP
+			parser = protocol['http']
+			if not parser.complete : return
+			
+			path = [part.decode('utf-8') for part in parser.url.split(b'/')[1:]]
+			
+			if parser.method == b'GET':
+				
+				try:
+					if path[-1] == 'on':
+						self.serv.sendraw(http_txtresp(
+							200, 'OK', bytes('1' if data[path[0]][path[1]]['on'] else '0', 'utf-8')
+						), addr)
+					else:
+						httpserv_sendvec2d(self.serv, addr, data[path[0]][path[1]][path[2]])
+				except:
+					self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
+			
+			elif parser.method == b'PUT':
+				
+				try:
+					if path[-1] == 'on':
+						data[path[0]][path[1]]['on'] = True
+						self.serv.sendraw(http_empty(204, 'OK'), addr)
+					elif path[-1] == 'off':
+						data[path[0]][path[1]]['on'] = False
+						self.serv.sendraw(http_empty(204, 'OK'), addr)
+					else:
+						res = httpserv_recvvec2d(self.serv, addr)
+						if res is not None: data[path[0]][path[1]][path[2]] = res
+				except:
+					self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
+				
+			elif parser.method == b'OPTIONS': 
+				self.serv.sendraw(bytes('HTTP/1.1 204 OK\r\nAccess-Control-Allow-Methods: OPTIONS, GET, PUT\r\nAccess-Control-Allow-Origin: *\r\n\r\n', 'utf-8'), addr)
+			
+			else : self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
+			
+		parser.reset()
 ctrlpanel = { 
 	# local cam mjpeg streaming server
 	'localcamera': CtrlPanelServer(
@@ -167,7 +184,7 @@ def rotate_wheels(vel):
 	#robot.left(vel[0]);
 	#robot.right(vel[0]);
 
-set_timer('sockalive', 0.5) # might be unnecessary, but may help performance
+set_timer('sockalive', 5) 
 #set_timer('sockconnect', 0.1)
 while True:
 	global camera_frame, camera_jpegbytes, tankpos, tank_realspeed, tank_targetspeed
@@ -204,3 +221,4 @@ while True:
 #		- for ... in list(...dict...)
 #		- use dict for url dispatcher ?
 #	- handle timers differently ?
+# 	- compile framing with optimization enabled

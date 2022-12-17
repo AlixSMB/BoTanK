@@ -1,10 +1,11 @@
 'use strict';
 
 let getdom = (str, el=document) => [...el.querySelectorAll(str)];
-let uniqueid = (function(){
+let uniqueid_gen = function(){
 	let tmp = -1;
 	return function(){ return ++tmp; }
-})();
+};
+let uniqueids = [uniqueid_gen(), uniqueid_gen()];
 
 function resetNodesVals(nodes) { nodes.forEach(node => node.value = node.getAttribute('oldvalue')); }
 function updateNodesVals(nodes){ nodes.forEach(node => node.setAttribute('oldvalue', node.value)); }
@@ -66,6 +67,21 @@ ctx.scale(1, -1);           // set y axis pointing up
 ctx.translate(0, -canvasH); // origin at bottom left
 
 let tanks = [];
+class Loop{
+	constructor(fun, types=[]){
+		this.id = uniqueids[1];
+		this.fun = fun;
+		this.types = types;
+		this.stop = false;
+	}
+	addToPool(pool){
+		this.types.forEach(type => {
+			if (! (type in pool)) pool[type] = {};
+			pool[type][this.id] = this;
+		});
+		pool[ids][this.id] = this;
+	}
+}
 class Tank{
 	static colors = ['red', 'green', 'blue', 'orange', 'purple'];
 	
@@ -92,10 +108,15 @@ class Tank{
 			auto: { on: false }
 		};
 		
-		this.id = uniqueid();
+		this.id = uniqueids[0]();
 		this.addr = addr;
-		this.netloops = 0;
+		this.getloops = 0;
+		this.setloops = 0;
 		this.netstop = false;
+		this.net = {
+			stop: false,
+			loops: {}
+		};
 		
 		this.color = color === null ? Tank.colors[ Tank.colors.length % this.id ] : color;
 		this.path = new Path2D();
@@ -107,7 +128,9 @@ class Tank{
 		
 		this.gamepad = {
 			on: false,
-			ind: this.id
+			ind: this.id,
+			obj: null,
+			netloops: 0
 		};
 	}
 	
@@ -124,7 +147,7 @@ class Tank{
 	setData(path, data, on_ok, on_errcode, on_errnet, on_netstop, isloop){
 		if (this.netstop){
 			on_netstop();
-			if (isloop) this.netloops--; 
+			if (isloop) this.setloops--; 
 			return;
 		}
 		
@@ -134,7 +157,7 @@ class Tank{
 			else{
 				if (isloop) this.netloops--;
 				on_errcode(res.status, res.statusText);
-				this.toggleNeterror(true);
+				//this.toggleNeterror(true);
 			}
 		})
 		.catch(err => {
@@ -190,7 +213,7 @@ class Tank{
 	
 	getData(path, on_ok, on_errcode, on_errnet, isloop){
 		if (this.netstop){
-			if (isloop) this.netloops--; 
+			if (isloop) this.getloops--; 
 			return;
 		}
 		
@@ -254,19 +277,48 @@ class Tank{
 	}
 	
 	// sends new request once the answer to the previous one arrives
-	getPosLoop(){ this.getVec2d(['move', 'real', 'pos'], false, () => this.getPosLoop(), true); }
-	getDirLoop(){ this.getVec2d(['move', 'real', 'dir'], false, () => this.getDirLoop(), true); }
+	// HTTP1.1 connections are "keep alive" by default so this should be fine in terms of latency 
+	getLoop(rec){
+		this.getloops++;
+		rec(rec);
+	}
+	getPosLoop(){ this.getLoop( rec => this.getVec2d(['move', 'real', 'pos'], false, () => rec(), true) ) }
+	getDirLoop(){ this.getLoop( rec => this.getVec2d(['move', 'real', 'dir'], false, () => rec(), true) ) }
+	
+	gamepadVelLoop(stop, getXY){
+		if (!this.gamepad.on || this.gamepad.obj === null){
+			this.gamepad.netloops--;
+			return; // stop loop
+		}
+		
+		let [x, y] = [this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]];
+		
+		this.setData(
+			'/move/com/vel', `${x.toFixed(1)};${y.toFixed(1)}`, 
+			() => {
+				[this.move.com.vel[0], this.move.com.vel[1]] = [x, y];
+				if (msg) this.dispmsg(`${path} set to (${x};${y})`);
+				this.gamepadVelLoop(stop, getXY);
+			}, 
+			(code, status) => this.gamepad.netloops--;,
+			err => this.gamepad.netloops--;,
+			() => this.gamepad.netloops--;,
+			true
+		);
+		
+		this.setVec2d(['move', 'com', 'vel'], x, y, false, () => this.setVelLoop(getXY, cont), true);
+	}
 	
 	getAll(callback=null){
 		this.netstop = true; // stop the running loops 
 		let id = window.setInterval(() => {
-			if (this.netloops == 0){
+			if (this.getloops == 0){
 				this.netstop = false;
 				
 				this.getBool( ['move', 'auto'] );
 				this.getBool( ['cannon', 'auto'] );
-				this.netloops++; this.getPosLoop();
-				this.netloops++; this.getDirLoop();
+				this.getPosLoop();
+				this.getDirLoop();
 				
 				window.clearInterval(id);
 				if (callback !== null) callback();
@@ -285,11 +337,25 @@ class Tank{
 		this.getAll();
 	}
 	
+	toggleGamepad(on){
+		this.gamepad.on = on;
+		
+		if (on && this.gamepad.obj !== null && ...check loops...){
+			this.gamepad.loop = true;
+			this.setVelLoop(
+				()=>{
+					
+				}, 
+				() => [this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]]
+			);
+		}
+	}
 	connectGamepad(gamepad){
-		this.gamepad = gamepad;
+		this.gamepad.obj = gamepad;
+		if (this.gamepad.on) this.toggleGamepad(true);
 	}
 	disconnectGamepad(){
-		this.gamepad = null;
+		this.gamepad.obj = null;
 	}
 	
 	draw(){
@@ -333,7 +399,7 @@ function addTank(){
 				Mode: ${html_radiozone("toggle_mode_cannon", "radio_cannonmode", ["manual", "auto"], tank.cannon.auto.on ? 1 : 0, tankidattr)}
 			</details><br>
 			<div>
-				<input type="checkbox" onchange="toggle_gamepad(this);" checked="${tank.gamepad.on}" ${tankidattr}>
+				<input type="checkbox" onchange="toggle_gamepad(this);" ${tank.gamepad.on ? "checked" : ""} ${tankidattr}>
 				Gamepad ${html_inputzone(
 					"in_gamepadind", 1, 
 					[tank.gamepad.ind],
@@ -341,7 +407,7 @@ function addTank(){
 				)}
 			</div>
 			<div>
-				<input type="checkbox" onchange="toggle_camerafeed(this);" checked="true"></input>Camera feed:
+				<input type="checkbox" onchange="toggle_camerafeed(this);" checked></input>Camera feed:
 				<img width=200 style="-webkit-user-select:none;display:block;" ${tankidattr}>
 			</div>
 		</div>
@@ -351,19 +417,20 @@ let tankfromid = id => tanks.find(tank => tank.id == id)
 let tankfromnode = node => tankfromid( Number(node.getAttribute('tankid')) );
 
 function in_tankaddr(nodes){ tankfromnode(nodes[0]).setAddr(nodes[0].value); }
-function in_gamepadind(nodes){  
-	try{
-		tankfromnode(nodes[0]).connectGamepad( navigator.getGamepads()[Number(nodes[0].value)] );
-	}
-	catch{
-		dispmsgGamepad(Number(nodes[0].value), 'not connected');
-	}
-}
 function in_targetpos(nodes){ tankfromnode(nodes[0]).setVec2d(['move', 'auto', 'target'], Number(nodes[0].value), Number(nodes[1].value), true, null, false, nodes); }
 function toggle_mode_move(nodezone, value)  { tankfromnode(nodezone).setBool(['move', 'auto']  , value == 'auto', true, nodezone); }
 function toggle_mode_cannon(nodezone, value){ tankfromnode(nodezone).setBool(['cannon', 'auto'], value == 'auto', true, nodezone); }
-function toggle_gamepad(node){}
-function in_gamepadind(node){}
+function toggle_gamepad(node){ tankfromnode(node).toggleGamepad(node.checked); }
+function in_gamepadind(nodes){
+	try{
+		gamepad = navigator.getGamepads()[Number(nodes[0].value)];
+		if (gamepad === null) throw new Error();
+		tankfromnode(nodes[0]).connectGamepad(gamepad);
+	}
+	catch{
+		dispmsgGamepad(nodes[0].value, 'not connected');
+	}
+}
 function toggle_camerafeed(node){ getdom('img', node.parentNode)[0].style.display = node.checked ? 'block' : 'none'; }
 
 
@@ -377,10 +444,12 @@ window.setInterval(loop, 1000/fps)
 
 window.addEventListener("gamepadconnected", ev => {
 	dispmsgGamepad(ev.gamepad.index, 'connected')
+	let tank = tanks.find(tank => tank.gamepad.ind == ev.gamepad.index);
+	if (tank) tank.connectGamepad(ev.gamepad);
 });
 window.addEventListener("gamepaddisconnected", ev => {
 	dispmsgGamepad(ev.gamepad.index, 'disconnected');
-	let tank = tanks.find(tank => tank.gamepad !== null && tank.gamepad.index == ev.gamepad.index);
+	let tank = tanks.find(tank => tank.gamepad.ind == ev.gamepad.index);
 	if (tank) tank.disconnectGamepad();
 });
 
