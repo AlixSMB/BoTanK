@@ -125,11 +125,11 @@ class Tank{
 		};
 		
 		this.id = uniqueids[0]();
+		this.loops = {ids: {}, gamepad: {}, GET: {}, SET: {}};
 		
 		this.net = {
 			addr: addr,
-			stop: false,
-			loops: {ids: {}, gamepad: {}, GET: {}, SET: {}}
+			stop: false
 		};
 		
 		this.color = color === null ? Tank.colors[ Tank.colors.length % this.id ] : color;
@@ -156,12 +156,12 @@ class Tank{
 		getdom(`.span_unreachable[tankid="${this.id}"]`)[0].style.display = on ? 'inline' : 'none';
 	}
 	stopLoop(loop){
-		loop.delFromPool(this.net.loops);
+		loop.delFromPool(this.loops);
 		loop.stop();
 	}
 	stopLoops(types=[]){
-		if (types.length == 0) Object.values(this.net.loops.ids).forEach(loop => this.stopLoop(loop)); // stop all loops
-		else                   [...new Set(types.map(type => Object.values(this.net.loops[type])).flat())].forEach(loop => this.stopLoop(loop)); 
+		if (types.length == 0) Object.values(this.loops.ids).forEach(loop => this.stopLoop(loop)); // stop all loops
+		else                   [...new Set(types.map(type => Object.values(this.loops[type])).flat())].forEach(loop => this.stopLoop(loop)); 
 	}
 	
 	setData(path, data, on_ok, on_errcode, on_errnet, on_netstop, loop=null){
@@ -314,14 +314,26 @@ class Tank{
 	
 	// sends new request once the answer to the previous one arrives
 	// HTTP1.1 connections are "keep alive" by default so this should be fine in terms of latency 
-	getLoop(fun){ new Loop(fun, noop, ['GET']).addToPool(this.net.loops).rec(); }
+	getLoop(fun){ new Loop(fun, noop, ['GET']).addToPool(this.loops).rec(); }
 	getPosLoop(){ this.getLoop( loop => this.getVec2d(['move', 'real', 'pos'], false, loop) ) }
 	getDirLoop(){ this.getLoop( loop => this.getVec2d(['move', 'real', 'dir'], false, loop) ) }
-	gamepadLoop(fun){ new Loop(fun, noop, ['SET','gamepad']).addToPool(this.net.loops).rec(); }
+	
+	gamepadUpdateLoop(delay=100){ // update our gamepad object
+		new Loop(loop => {
+			if (!this.gamepad.on || this.gamepad.obj === null) this.stopLoop(loop);
+			else {
+				this.gamepad.obj = navigator.getGamepads()[this.gamepad.ind];
+				window.setTimeout(loop.rec.bind(loop), delay);
+			}
+		},
+		noop, ['gamepad'])
+		.addToPool(this.loops).rec();
+	}
+	gamepadSetLoop(fun){ new Loop(fun, noop, ['SET','gamepad']).addToPool(this.loops).rec(); }
 	gamepadVelLoop(){
 		if (!this.gamepad.on || this.gamepad.obj === null) return;
 		
-		this.gamepadLoop(loop => {
+		this.gamepadSetLoop(loop => {
 			if (!this.gamepad.on || this.gamepad.obj === null) this.stopLoop(loop);
 			else {
 				let [x, y] = [this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]];
@@ -330,13 +342,12 @@ class Tank{
 		});
 	}
 	
-	
 	refresh(){
 		this.toggleNeterror(false);
 		this.dispmsg('refreshing connection...');
 		
 		// stop all loops
-		this.stopLoops();
+		this.stopLoops(['GET', 'SET']);
 		// set values
 		getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).forEach(el => el.click());
 		getdom(`.div_tank[tankid="${this.id}"] .div_radiozone input[checked]`).forEach(el => el.click());
@@ -352,6 +363,7 @@ class Tank{
 		this.gamepad.on = on;
 		if (on && this.gamepad.obj !== null){ // start gamepad loops
 			this.stopLoops(['gamepad']);
+			this.gamepadUpdateLoop();
 			this.gamepadVelLoop();
 		}
 	}
@@ -428,11 +440,12 @@ function toggle_mode_cannon(nodezone, value){ tankfromnode(nodezone).setBool(['c
 function toggle_gamepad(node){ tankfromnode(node).toggleGamepad(node.checked); }
 function in_gamepadind(nodes){
 	try{
-		gamepad = navigator.getGamepads()[Number(nodes[0].value)];
+		let gamepad = navigator.getGamepads()[Number(nodes[0].value)];
 		if (gamepad === null) throw new Error();
 		tankfromnode(nodes[0]).connectGamepad(gamepad);
 	}
 	catch{
+		tankfromnode(nodes[0]).disconnectGamepad();
 		dispmsgGamepad(nodes[0].value, 'not connected');
 	}
 }
@@ -440,11 +453,12 @@ function toggle_camerafeed(node){ getdom('img', node.parentNode)[0].style.displa
 
 
 let fps = 25;
-function loop(){
+window.setInterval(() => {
+	
 	ctx.clearRect(0,0, canvasW, canvasH);
 	tanks.forEach( tank => tank.draw() );
-}
-window.setInterval(loop, 1000/fps)
+	
+}, 1000/fps)
 
 
 window.addEventListener("gamepadconnected", ev => {
@@ -460,7 +474,5 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
-	- replace http requests loops with http streams
-	- remove </input> elements
 
 */

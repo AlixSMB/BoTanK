@@ -95,7 +95,7 @@ def coms_onmsg(self, addr):
 			parser = protocol['ws']
 			if not parser.complete : return
 			
-			
+			# do something here...
 			
 		else: # HTTP
 			parser = protocol['http']
@@ -186,6 +186,7 @@ def rotate_wheels(vel):
 
 set_timer('sockalive', 5) 
 #set_timer('sockconnect', 0.1)
+set_timer('velcheck', 1)
 while True:
 	global camera_frame, camera_jpegbytes, tankpos, tank_realspeed, tank_targetspeed
 	timers_start()
@@ -197,8 +198,8 @@ while True:
 	#cv2.imshow('videostream', camera_frame)
 	
 	# apply speed
-	rotate_wheels( data['move']['com']['vel'] )
-	
+	#rotate_wheels( data['move']['com']['vel'] )
+	if check_timer('velcheck') : print(data['move']['com']['vel'])
 	# compute tank pos, speed
 	
 	
