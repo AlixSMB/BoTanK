@@ -69,33 +69,33 @@ ctx.translate(0, -canvasH); // origin at bottom left
 
 class Loop{
 	constructor(fun, on_stop, types=[]){
-		this.id = uniqueids[1];
+		this.id = uniqueids[1]();
 		this.fun = fun;
 		this.types = types;
 		this.on_stop = on_stop;
-		this.stop = false;
+		this.stopped = false;
 	}
 	addToPool(pool){
 		this.types.forEach(type => {
 			if (! (type in pool)) pool[type] = {};
 			pool[type][this.id] = this;
 		});
-		pool[ids][this.id] = this;
+		pool.ids[this.id] = this;
 		return this;
 	}
 	delFromPool(pool){
 		this.types.forEach(type => delete pool[type][this.id]);
-		delete pool[ids][this.id];
+		delete pool.ids[this.id];
 		return this;
 	}
 	stop(){
-		if (this.stop) return this; // already stopped
+		if (this.stopped) return this; // already stopped
 		
 		this.on_stop();
-		this.stop = true;
+		this.stopped = true;
 		return this;
 	}
-	rec(){ if (!this.stop) this.fun(this); }
+	rec(){ if (!this.stopped) this.fun(this); }
 }
 let tanks = [];
 class Tank{
@@ -129,7 +129,7 @@ class Tank{
 		this.net = {
 			addr: addr,
 			stop: false,
-			loops: {}
+			loops: {ids: {}, gamepad: {}, GET: {}, SET: {}}
 		};
 		
 		this.color = color === null ? Tank.colors[ Tank.colors.length % this.id ] : color;
@@ -161,7 +161,7 @@ class Tank{
 	}
 	stopLoops(types=[]){
 		if (types.length == 0) Object.values(this.net.loops.ids).forEach(loop => this.stopLoop(loop)); // stop all loops
-		else                   [...new Set(types.forEach(type => Object.values(this.net.loops[type])).flat())].forEach(loop => this.stopLoop(loop)); 
+		else                   [...new Set(types.map(type => Object.values(this.net.loops[type])).flat())].forEach(loop => this.stopLoop(loop)); 
 	}
 	
 	setData(path, data, on_ok, on_errcode, on_errnet, on_netstop, loop=null){
@@ -171,7 +171,7 @@ class Tank{
 			return;
 		}
 		
-		fetch(`http://${this.addr}:8081${path}`, {method: 'PUT', body: data})
+		fetch(`http://${this.net.addr}:8081${path}`, {method: 'PUT', body: data})
 		.then(res => {
 			if (res.ok){
 				on_ok();
@@ -197,17 +197,16 @@ class Tank{
 			() => {
 				[obj[0], obj[1]] = [x, y];
 				this.dispmsg(`${path} set to (${x};${y})`);
-				if (callback !== null) callback();
 			}, 
 			(code, status) => {
-				if (nodes !== null) setNodesVals(nodes, obj);
+				setNodesVals(nodes, obj);
 				this.dispmsg(`error setting ${path} (${code} ${status})`);
 			},
 			err => {
-				if (nodes !== null) setNodesVals(nodes, obj);
+				setNodesVals(nodes, obj);
 				this.dispmsg(`error setting ${path} (${err})`);
 			},
-			() => { if (nodes !== null) setNodesVals(nodes, obj); }
+			() => setNodesVals(nodes, obj)
 		);
 	}
 	setVec2dFromLoop(parts, x, y, loop){
@@ -251,7 +250,7 @@ class Tank{
 			return;
 		}
 		
-		fetch(`http://${this.addr}:8081${path}`, {method: 'GET'})
+		fetch(`http://${this.net.addr}:8081${path}`, {method: 'GET'})
 		.then(res => {
 			if (res.ok) res.text().then(txt => {
 					on_ok(txt);
@@ -320,8 +319,10 @@ class Tank{
 	getDirLoop(){ this.getLoop( loop => this.getVec2d(['move', 'real', 'dir'], false, loop) ) }
 	gamepadLoop(fun){ new Loop(fun, noop, ['SET','gamepad']).addToPool(this.net.loops).rec(); }
 	gamepadVelLoop(){
+		if (!this.gamepad.on || this.gamepad.obj === null) return;
+		
 		this.gamepadLoop(loop => {
-			if (!this.gamepad.on || this.gamepad.obj === null) loop.stop();
+			if (!this.gamepad.on || this.gamepad.obj === null) this.stopLoop(loop);
 			else {
 				let [x, y] = [this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]];
 				this.setVec2dFromLoop(['move', 'com', 'vel'], x, y, loop);
@@ -339,6 +340,7 @@ class Tank{
 		// set values
 		getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).forEach(el => el.click());
 		getdom(`.div_tank[tankid="${this.id}"] .div_radiozone input[checked]`).forEach(el => el.click());
+		this.gamepadVelLoop();
 		// get values
 		this.getBool( ['move', 'auto'] );
 		this.getBool( ['cannon', 'auto'] );
@@ -371,7 +373,7 @@ class Tank{
 	}
 	
 	dispmsg(msg){
-		msgconsole.innerHTML += `<br>TANK&lt;${this.addr}&gt; <b>::</b> ${msg}`;
+		msgconsole.innerHTML += `<br>TANK&lt;${this.net.addr}&gt; <b>::</b> ${msg}`;
 	}
 }
 function addTank(){
