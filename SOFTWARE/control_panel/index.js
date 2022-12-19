@@ -67,7 +67,27 @@ let ctx = canvas.getContext('2d');
 ctx.scale(1, -1);           // set y axis pointing up
 ctx.translate(0, -canvasH); // origin at bottom left
 
-let pospicker = null;
+let pospicker_tank = null;
+
+function latch_targetpospicker(node){
+	let tank = tankfromnode(node);
+	canvas.style.cursor = `url('${tank.pickerUrl}') 0 24,auto`;
+	getdom('.btn_picktargetpos').forEach(el => {
+		el.style.animation = 'none';
+		el.style.boxShadow = null;
+	});
+	node.style.animation = null;
+	node.style.boxShadow = 'none';
+	pospicker_tank = tank;
+}
+function unlatch_targetpospicker(){
+	canvas.style.cursor = 'auto';
+	getdom('.btn_picktargetpos').forEach(el => {
+		el.style.animation = 'none';
+		el.style.boxShadow = null;
+	});
+	pospicker_tank = null;
+}
 
 class Loop{
 	constructor(fun, on_stop, types=[]){
@@ -134,14 +154,18 @@ class Tank{
 			stop: false
 		};
 		
-		this.color = color === null ? Tank.colors[ Tank.colors.length % this.id ] : color;
+		this.color = color === null ? Tank.colors[ Tank.colors.length % (this.id+1) ] : color;
 		this.path = new Path2D();
 		let base = 10; let height = 20;
 		this.path.moveTo(-base/2,0);
 		this.path.lineTo(base/2, 0);
 		this.path.lineTo(0, height);
 		this.path.closePath();
-				
+		
+		this.pickerUrl = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" height="24" width="24"><path style="fill:${this.color};" d="M5 21V4h9l.4 2H20v10h-7l-.4-2H7v7Zm7.5-11Zm2.15 4H18V8h-5.25l-.4-2H7v6h7.25Z"/></svg>`;
+		this.pickerImg = new Image();
+		this.pickerImg.src = this.pickerUrl;
+		
 		this.gamepad = {
 			on: false,
 			ind: this.id,
@@ -378,10 +402,17 @@ class Tank{
 	}
 	
 	draw(){
+		// draw target flag
+		ctx.save();
+		ctx.translate(...this.move.auto.target);
+		ctx.scale(1,-1);
+		ctx.drawImage(this.pickerImg, 0, -this.pickerImg.height);
+		ctx.restore();
+		// draw tank
 		ctx.save();
 		ctx.fillStyle = this.color;
-		ctx.translate(this.move.real.pos.x, this.move.real.pos.y);
-		ctx.rotate(-Math.tan(this.move.real.dir.y / this.move.real.dir.x));
+		ctx.translate(...this.move.real.pos);
+		ctx.rotate(-Math.tan(this.move.real.dir[1] / this.move.real.dir[0]));
 		ctx.fill(this.path);
 		ctx.restore();
 	}
@@ -407,9 +438,9 @@ function addTank(){
 				Mode: ${html_radiozone("toggle_mode_move", "radio_movemode", ["manual", "auto"], tank.move.auto.on ? 1 : 0, tankidattr)}
 				<div>
 					Target pos.: ${html_inputzone(
-						"in_targetpos", 2, 
+						'in_targetpos', 2, 
 						[tank.move.com.pos[0].toFixed(1), tank.move.com.pos[0].toFixed(1)],
-						[tankidattr+" size=2", tankidattr+" size=2"]
+						[tankidattr+' size=2 class="input_targetpos"', tankidattr+' size=2 class="input_targetpos"']
 					)}<!--
 					--><input type="image" src="res/click.png" onclick="pick_targetpos(this);" class="btn_picktargetpos btn" ${tankidattr} style="animation:none;"></input>
 				</div>
@@ -438,26 +469,8 @@ let tankfromnode = node => tankfromid( Number(node.getAttribute('tankid')) );
 
 function in_tankaddr(nodes){ tankfromnode(nodes[0]).setAddr(nodes[0].value); }
 function in_targetpos(nodes){ tankfromnode(nodes[0]).setVec2dFromInput(['move', 'auto', 'target'], Number(nodes[0].value), Number(nodes[1].value), nodes); }
-function latch_targetpospicker(node){
-	canvas.style.cursor = 'url(res/flag.png) 0 24,auto';
-	getdom('.btn_picktargetpos').forEach(el => {
-		el.style.animation = 'none';
-		el.style.boxShadow = null;
-	});
-	node.style.animation = null;
-	node.style.boxShadow = 'none';
-	pospicker = tankfromnode(node);
-}
-function unlatch_targetpospicker(){
-	canvas.style.cursor = 'auto';
-	getdom('.btn_picktargetpos').forEach(el => {
-		el.style.animation = 'none';
-		el.style.boxShadow = null;
-	});
-	pospicker = null;
-}
 function pick_targetpos(node){
-	if (pospicker == tankfromnode(node)) unlatch_targetpospicker();
+	if (pospicker_tank == tankfromnode(node)) unlatch_targetpospicker();
 	else latch_targetpospicker(node);
 }
 function toggle_mode_move(nodezone, value)  { tankfromnode(nodezone).setBool(['move', 'auto']  , value == 'auto', true, nodezone); }
@@ -485,6 +498,23 @@ window.setInterval(() => {
 	
 }, 1000/fps)
 
+//canvas.addEventListener("mousemove", ev => {
+//	
+//});
+canvas.addEventListener("click", ev => {
+	if (pospicker_tank !== null){
+		ev.preventDefault();
+		
+		let [x, y] = [ ev.pageX - canvas.getBoundingClientRect().left, canvasH - (ev.pageY - canvas.getBoundingClientRect().top) ];
+		let textfields = getdom(`.input_targetpos[tankid='${pospicker_tank.id}']`);
+		textfields[0].value = x.toFixed(2);
+		textfields[1].value = y.toFixed(2);
+		textfields.forEach(el => el.dispatchEvent(new Event("input")));
+		getdom('.btn_ok', textfields[0].parentNode)[0].click();
+		
+		unlatch_targetpospicker();
+	}
+});
 
 window.addEventListener("gamepadconnected", ev => {
 	dispmsgGamepad(ev.gamepad.index, 'connected')

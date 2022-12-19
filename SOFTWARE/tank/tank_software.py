@@ -71,7 +71,7 @@ def localcam_onmsg(self, addr):
 			, 'utf-8'), addr)
 			if sent is True:
 				self.data['streams'].add(addr)
-				set_timer('localcamfps', 1/20)
+				set_timer('localcamfps', 1/10) # 10 fps
 		else:
 			self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
 		
@@ -184,7 +184,7 @@ def rotate_wheels(vel):
 	#robot.left(vel[0]);
 	#robot.right(vel[0]);
 
-set_timer('sockalive', 5) 
+set_timer('sockalive', 1) 
 #set_timer('sockconnect', 0.1)
 set_timer('velcheck', 1)
 while True:
@@ -199,7 +199,8 @@ while True:
 	
 	# apply speed
 	#rotate_wheels( data['move']['com']['vel'] )
-	if check_timer('velcheck') : print(data['move']['com']['vel'])
+	#if check_timer('velcheck') : print(data['move']['com']['vel'])
+	
 	# compute tank pos, speed
 	
 	
