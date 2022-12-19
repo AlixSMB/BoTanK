@@ -27,13 +27,13 @@ let html_inputzone = (on_ok, n=1, values=null, attrs=null, sep="<b>;</b>") => {
 	return `<div class="div_inputzone" style="display:inline;">
 			${inputs}<!--
 			--><div class="div_inbtnctls" style="display:none;">
-				<input type="image" src="res/check.png" class="btn_ok" onclick="
+				<input type="image" src="res/check.png" class="btn_ok btn" onclick="
 					let nodes = getdom('input', this.parentNode.parentNode).splice(0, ${n});
 					${on_ok}(nodes);
 					updateNodesVals(nodes);
 					this.parentNode.style.display = 'none';
 				">
-				<input type="image" src="res/cancel.png" class="btn_cancel" onclick="
+				<input type="image" src="res/cancel.png" class="btn_cancel btn" onclick="
 					resetNodesVals( getdom('input', this.parentNode.parentNode).splice(0, ${n}) );
 					this.parentNode.style.display = 'none';
 				">
@@ -66,6 +66,8 @@ let canvasW = canvas.width; let canvasH = canvas.height;
 let ctx = canvas.getContext('2d');
 ctx.scale(1, -1);           // set y axis pointing up
 ctx.translate(0, -canvasH); // origin at bottom left
+
+let pospicker = null;
 
 class Loop{
 	constructor(fun, on_stop, types=[]){
@@ -139,7 +141,7 @@ class Tank{
 		this.path.lineTo(base/2, 0);
 		this.path.lineTo(0, height);
 		this.path.closePath();
-		
+				
 		this.gamepad = {
 			on: false,
 			ind: this.id,
@@ -398,7 +400,7 @@ function addTank(){
 		<div class="div_tank" ${tankidattr}>
 			<div>
 				<span style="color:${tank.color};"><b>Tank</b></span> ${html_inputzone("in_tankaddr", 1, [tank.net.addr], [tankidattr+" size=6"])} <span class="span_unreachable" ${tankidattr}>unreachable</span>
-				<input type="image" src="res/sync.png" onclick="tankfromid(${tank.id}).refresh()" class="btn_refresh"></input>
+				<input type="image" src="res/sync.png" onclick="tankfromid(${tank.id}).refresh()" class="btn_refresh btn"></input>
 			</div><br>
 			<details>
 				<summary>Movement</summary>
@@ -408,7 +410,8 @@ function addTank(){
 						"in_targetpos", 2, 
 						[tank.move.com.pos[0].toFixed(1), tank.move.com.pos[0].toFixed(1)],
 						[tankidattr+" size=2", tankidattr+" size=2"]
-					)}
+					)}<!--
+					--><input type="image" src="res/click.png" onclick="pick_targetpos(this);" class="btn_picktargetpos btn" ${tankidattr} style="animation:none;"></input>
 				</div>
 			</details>
 			<details>
@@ -435,6 +438,28 @@ let tankfromnode = node => tankfromid( Number(node.getAttribute('tankid')) );
 
 function in_tankaddr(nodes){ tankfromnode(nodes[0]).setAddr(nodes[0].value); }
 function in_targetpos(nodes){ tankfromnode(nodes[0]).setVec2dFromInput(['move', 'auto', 'target'], Number(nodes[0].value), Number(nodes[1].value), nodes); }
+function latch_targetpospicker(node){
+	canvas.style.cursor = 'url(res/flag.png) 0 24,auto';
+	getdom('.btn_picktargetpos').forEach(el => {
+		el.style.animation = 'none';
+		el.style.boxShadow = null;
+	});
+	node.style.animation = null;
+	node.style.boxShadow = 'none';
+	pospicker = tankfromnode(node);
+}
+function unlatch_targetpospicker(){
+	canvas.style.cursor = 'auto';
+	getdom('.btn_picktargetpos').forEach(el => {
+		el.style.animation = 'none';
+		el.style.boxShadow = null;
+	});
+	pospicker = null;
+}
+function pick_targetpos(node){
+	if (pospicker == tankfromnode(node)) unlatch_targetpospicker();
+	else latch_targetpospicker(node);
+}
 function toggle_mode_move(nodezone, value)  { tankfromnode(nodezone).setBool(['move', 'auto']  , value == 'auto', true, nodezone); }
 function toggle_mode_cannon(nodezone, value){ tankfromnode(nodezone).setBool(['cannon', 'auto'], value == 'auto', true, nodezone); }
 function toggle_gamepad(node){ tankfromnode(node).toggleGamepad(node.checked); }
@@ -474,5 +499,5 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
-
+	. use input type number
 */
