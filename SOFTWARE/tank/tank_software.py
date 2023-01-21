@@ -3,12 +3,8 @@ from util import * # util.py
 import cv2
 import cv2.aruco as aruco
 import numpy as np
-
-import pickle
-
-#CAMERADATA_FILENAME = "camera_calibration_params_1"
-#print(f"Reading camera calibration params from \"{CAMERADATA_FILENAME}\"")
-#with open(CAMERADATA_FILENAME, "rb") as filecamera : cameradata = pickle.load(filecamera)
+from adafruit_motorkit import MotorKit
+kit = MotorKit()
 
 
 class CtrlPanelServer:
@@ -38,7 +34,7 @@ def timers_end():
 	for timer in timers : timers[timer][2] = False
 
 # receive camera feed
-#httpvideo = HTTPVideoStream('10.7.177.245', '8080', '/video/mjpeg')
+#httpvideo = HTTPVideoStream('192.168.1.173', '8080', '/video/mjpeg')
 vid = cv2.VideoCapture(0)
 
 print(f"Local IP addresses: {getLocalIps()}")
@@ -180,9 +176,8 @@ data = {
 };
 
 def rotate_wheels(vel):
-	pass
-	#robot.left(vel[0]);
-	#robot.right(vel[0]);
+	kit.motor1.throttle = vel[0];
+	kit.motor2.throttle = vel[1];
 
 set_timer('sockalive', 1) 
 #set_timer('sockconnect', 0.1)
@@ -195,10 +190,10 @@ while True:
 	#camera_frame = cv2.imdecode( np.frombuffer(camera_jpegbytes, dtype=np.uint8), cv2.IMREAD_COLOR)
 	_, camera_frame = vid.read()
 	camera_jpegbytes = cv2.imencode('.jpeg', camera_frame)[1].tobytes()
-	#cv2.imshow('videostream', camera_frame)
+	cv2.imshow('videostream', camera_frame)
 	
 	# apply speed
-	#rotate_wheels( data['move']['com']['vel'] )
+	rotate_wheels( data['move']['com']['vel'] )
 	#if check_timer('velcheck') : print(data['move']['com']['vel'])
 	
 	# compute tank pos, speed

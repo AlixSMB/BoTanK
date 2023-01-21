@@ -89,6 +89,8 @@ function unlatch_targetpospicker(){
 	pospicker_tank = null;
 }
 
+let velconvert = vel => vel.map(part => (part>0 && part<0.1 || part<0 && part>-0.1) ? 0 : part/2);
+
 class Loop{
 	constructor(fun, on_stop, types=[]){
 		this.id = uniqueids[1]();
@@ -362,7 +364,8 @@ class Tank{
 		this.gamepadSetLoop(loop => {
 			if (!this.gamepad.on || this.gamepad.obj === null) this.stopLoop(loop);
 			else {
-				let [x, y] = [this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]];
+				let [x, y] = velconvert([this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]]);
+				console.log(x, y);
 				this.setVec2dFromLoop(['move', 'com', 'vel'], x, y, loop);
 			}
 		});
@@ -529,5 +532,8 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
+	. send vel=0 on gamepad disconnect / disable
+	. canvas add axes, scaling
+	. canvas support scroll / zoom
 	. use input type number
 */

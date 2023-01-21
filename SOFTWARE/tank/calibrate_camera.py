@@ -1,3 +1,5 @@
+import numpy as np
+import cv2
 import cv2.aruco as aruco
 import pickle
 import os
@@ -5,19 +7,34 @@ import os
 from util import * # util.py
 
 
+# generate charuco board
+
+# HP laptop screen
+#PPM = 1366/0.310 # pixels/m
+# Asus display
+PPM = 1920/0.476 # pixels/m
+
+print(f"Pixels/meter set to {PPM}, make sure this is correct !")
+charuco_cell_size = 0.05; # in meters
+print(f"Aruco cell size set as {charuco_cell_size} m, make sure this is correct !")
+charuco_cell_psize = charuco_cell_size * PPM # in pixels
+charuco_nbcells_w = 7
+charuco_nbcells_h = 5
 aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
 aruco_params = aruco.DetectorParameters_create()
-charuco_cell_size = 0.104/3 # in meters, must be measured from the printed board and modified accordingly
-charuco_board = aruco.CharucoBoard_create(6, 8, charuco_cell_size, charuco_cell_size/2, aruco_dict)
+charuco_board = aruco.CharucoBoard_create(charuco_nbcells_w, charuco_nbcells_h, charuco_cell_psize, charuco_cell_psize/2, aruco_dict)
 
-# generate charuco board image
+charuco_boardimg = charuco_board.draw( [round(charuco_nbcells_w*charuco_cell_psize), round(charuco_nbcells_h*charuco_cell_psize)] )
 #cv2.imwrite('calibration_board-6X6_250.jpg', charuco_board.draw([400, 800]))
-#print("Created calibration board image")
+#print("Created calibration board image file")
 
 # generate calibration data
-httpvideo = HTTPVideoStream('10.7.177.245', 8080, '/video/mjpeg')
+#httpvideo = HTTPVideoStream('192.168.1.173', 8080, '/video/mjpeg')
+cap = cv2.VideoCapture(0)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 10000)  # get max. res
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 10000) # of camera
+print(f"Video res.: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
 
-print(f"Aruco cell size set as {charuco_cell_size} m, make sure this is correct")
 print("Take some shots of the calibration board from different angles:\n's' to take a shot, 'q' to stop")
 nbshots = 0
 
@@ -32,10 +49,12 @@ nbmarkers_shots = []
 
 start = True
 while True:
-	videoframe = httpvideo.getFrameImg()
+	#videoframe = cv2.imdecode(np.frombuffer(httpvideo.getFrameImg(), dtype=np.uint8), cv2.IMREAD_COLOR)
+	_, videoframe = cap.read()
 	cv2.imshow('videostream', videoframe)
+	cv2.imshow('charucoboard', charuco_boardimg)
 	
-	clicked = cv2.waitKey(1) 
+	clicked = cv2.waitKey(round(1000/30)) 
 	for keycode in keys_clicked:
 		if keycode == clicked and lastclicked != clicked: 
 			keys_clicked[keycode] = True
