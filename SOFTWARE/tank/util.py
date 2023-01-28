@@ -4,17 +4,17 @@ import time
 from hashlib import sha1
 from base64 import b64encode
 
-from ctypes import CDLL, Structure, POINTER, c_ubyte, c_uint, c_ulonglong
-CProg = CDLL('./ws_framing.dll')
-CProg.decode_frame.argtypes = [POINTER(c_ubyte)]
-class C_Frame(Structure):
-	_fields_ = [
-		('start', c_ulonglong),
-		('len', c_ulonglong),
-		('fin', c_ubyte),
-		('type', c_ubyte)
-	]
-CProg.decode_frame.restype = C_Frame
+#from ctypes import CDLL, Structure, POINTER, c_ubyte, c_uint, c_ulonglong
+#CProg = CDLL('./ws_framing.dll')
+#CProg.decode_frame.argtypes = [POINTER(c_ubyte)]
+#class C_Frame(Structure):
+#	_fields_ = [
+#		('start', c_ulonglong),
+#		('len', c_ulonglong),
+#		('fin', c_ubyte),
+#		('type', c_ubyte)
+#	]
+#CProg.decode_frame.restype = C_Frame
 
 
 def partial(fun, *args1):
@@ -52,7 +52,7 @@ class SockInfo:
 		self.sock = sock
 		self.addr = addr
 		self.lastexch = time.perf_counter() # last time data was transmitted
-	def nodata_elapsed(self):
+	def nodata_elapsed(self): # in s
 		return time.perf_counter() - self.lastexch
 class TCPServer:
 	def __init__(self, port):

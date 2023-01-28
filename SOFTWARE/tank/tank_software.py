@@ -1,4 +1,5 @@
 from util import * # util.py
+import positioning # positionin.py
 
 import cv2
 import cv2.aruco as aruco
@@ -20,8 +21,8 @@ class CtrlPanelServer:
 				self.serv.close(addr)
 
 timers = {}
-def set_timer(name, dt):
-	timers[name] = [0, dt, False]
+def set_timer(name, dt): # in s
+	timers[name] = [0, dt, True]
 def check_timer(name):
 	return timers[name][2]
 def timers_start():
@@ -35,7 +36,14 @@ def timers_end():
 
 # receive camera feed
 #httpvideo = HTTPVideoStream('192.168.1.173', '8080', '/video/mjpeg')
-vid = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(0)
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 10000)  # get max. res
+cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 10000) # of camera
+cap.set(cv2.CAP_PROP_FPS, 100)     # high framerate and low exposure time
+cap.set(cv2.CAP_PROP_EXPOSURE, -5) # should help minimize motion blur
+print(f"Video res.: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
+print(f"Video FPS: {cap.get(cv2.CAP_PROP_FPS)}")
+print(f"Video exposure: {cap.get(cv2.CAP_PROP_EXPOSURE)}")
 
 print(f"Local IP addresses: {getLocalIps()}")
 
@@ -65,24 +73,11 @@ def localcam_onmsg(self, addr):
 				'Cache-Control: no-cache\r\n' +
 				'Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n'
 			, 'utf-8'), addr)
-			if sent is True:
-				self.data['streams'].add(addr)
-				set_timer('localcamfps', 1/10) # 10 fps
+			if sent is True : self.data['streams'].add(addr)
 		else:
 			self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
 		
 		parser.reset()
-	
-	if addr in self.data['streams'] and check_timer('localcamfps'):
-		self.serv.sendraw(
-			bytes(
-				"--frame\r\n" +
-				"Content-Type: image/jpeg\r\n" +
-				"Content-Length: " + str(len(camera_jpegbytes)) + "\r\n\r\n",
-			'utf-8') +
-			camera_jpegbytes +
-			bytes("\r\n",'utf-8')
-		, addr)
 def coms_onmsg(self, addr):
 	if self.serv.read(addr): 
 		protocol = self.serv.protocols[addr]
@@ -144,6 +139,7 @@ ctrlpanel = {
 		8081, 10, coms_onmsg
 	)
 }
+camserv = ctrlpanel["localcamera"]
 
 data = {
 	'move': {
@@ -179,35 +175,57 @@ def rotate_wheels(vel):
 	kit.motor1.throttle = vel[0];
 	kit.motor2.throttle = vel[1];
 
+set_timer('read_imgframe', 1/10)
+set_timer('stream_imgframe', 1/10) # 10 fps
 set_timer('sockalive', 1) 
-#set_timer('sockconnect', 0.1)
-set_timer('velcheck', 1)
+set_timer('sockconnect', 1)
 while True:
-	global camera_frame, camera_jpegbytes, tankpos, tank_realspeed, tank_targetspeed
+	#global camera_frame, camera_jpegbytes, tankpos, tank_realspeed, tank_targetspeed
 	timers_start()
 	
 	#camera_jpegbytes = httpvideo.getFrameImg()
 	#camera_frame = cv2.imdecode( np.frombuffer(camera_jpegbytes, dtype=np.uint8), cv2.IMREAD_COLOR)
-	_, camera_frame = vid.read()
-	camera_jpegbytes = cv2.imencode('.jpeg', camera_frame)[1].tobytes()
-	cv2.imshow('videostream', camera_frame)
+	
+	if check_timer('read_imgframe'):
+		ret, camera_frame = cap.read()
+		if not ret: 
+			print("Camera error, abort")
+			break
+		#cv2.imshow('videostream', camera_frame)
+	
+	# compute tank pos, speed
 	
 	# apply speed
 	rotate_wheels( data['move']['com']['vel'] )
 	#if check_timer('velcheck') : print(data['move']['com']['vel'])
 	
-	# compute tank pos, speed
+	# check for connection requests
+	if check_timer('sockconnect'):
+		for part in ctrlpanel : ctrlpanel[part].serv.connect()
 	
-	
-	# listen for http connections
-	#if check_timer('sockconnect'):
-	for part in ctrlpanel : ctrlpanel[part].serv.connect()
-	# check connections
+	# check connections are alive
 	if check_timer('sockalive'):
 		for part in ctrlpanel : ctrlpanel[part].checkdead()
+	
+	# stream camera
+	if check_timer('stream_imgframe'):
+		camera_jpegbytes = cv2.imencode('.jpeg', camera_frame)[1].tobytes()
+		
+		for addr in camserv.data['streams']:
+			camserv.serv.sendraw(
+				bytes(
+					"--frame\r\n" +
+					"Content-Type: image/jpeg\r\n" +
+					"Content-Length: " + str(len(camera_jpegbytes)) + "\r\n\r\n",
+				'utf-8') +
+				camera_jpegbytes +
+				bytes("\r\n",'utf-8')
+			, addr)
+	
 	# handle received messages
 	for part in ctrlpanel:
-		for addr in list(ctrlpanel[part].serv.con.remotes) : ctrlpanel[part].on_msg( ctrlpanel[part], addr )
+		for addr in list(ctrlpanel[part].serv.con.remotes) : ctrlpanel[part].on_msg(ctrlpanel[part], addr)
+	
 	
 	if cv2.waitKey(1) == ord('q') : break
 	timers_end()
