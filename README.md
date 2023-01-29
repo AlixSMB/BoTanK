@@ -9,6 +9,7 @@ Projet tank intelligent
 
 ## Contrôle manuel
 - Utilisation de Gamepad connecté à l'ordi (manette Xbox360)
+- Zone joystick divisée en parties correspondant à des mouvements de tank prédéfinis 
 
 ## Déplacement autonome
 - Utilisation de grille Charuco
