@@ -4,8 +4,8 @@ import positioning # positionin.py
 import cv2
 import cv2.aruco as aruco
 import numpy as np
-from adafruit_motorkit import MotorKit
-kit = MotorKit()
+#from adafruit_motorkit import MotorKit
+#kit = MotorKit()
 
 
 class CtrlPanelServer:
@@ -99,10 +99,10 @@ def coms_onmsg(self, addr):
 				try:
 					if path[-1] == 'on':
 						self.serv.sendraw(http_txtresp(
-							200, 'OK', bytes('1' if data[path[0]][path[1]]['on'] else '0', 'utf-8')
+							200, 'OK', bytes('1' if data[path[0]][path[1]]['on'].val else '0', 'utf-8')
 						), addr)
 					else:
-						httpserv_sendvec2d(self.serv, addr, data[path[0]][path[1]][path[2]])
+						httpserv_sendvec2d(self.serv, addr, data[path[0]][path[1]][path[2]].val)
 				except:
 					self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
 			
@@ -110,14 +110,14 @@ def coms_onmsg(self, addr):
 				
 				try:
 					if path[-1] == 'on':
-						data[path[0]][path[1]]['on'] = True
+						data[path[0]][path[1]]['on'].onchange(True)
 						self.serv.sendraw(http_empty(204, 'OK'), addr)
 					elif path[-1] == 'off':
-						data[path[0]][path[1]]['on'] = False
+						data[path[0]][path[1]]['on'].onchange(False)
 						self.serv.sendraw(http_empty(204, 'OK'), addr)
 					else:
 						res = httpserv_recvvec2d(self.serv, addr)
-						if res is not None: data[path[0]][path[1]][path[2]] = res
+						if res is not None : data[path[0]][path[1]][path[2]].onchange(res)
 				except:
 					self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
 				
@@ -141,41 +141,52 @@ ctrlpanel = {
 }
 camserv = ctrlpanel["localcamera"]
 
+def update_data(self, val):
+	self.val = val
+def update_move_vel(self, vel):
+	if not data['move']['auto']['on'].val:
+		#kit.motor1.throttle = vel[0]
+		#kit.motor2.throttle = vel[1]
+		self.val = vel
+def toggle_move_auto(self, on):
+	if on:
+		kit.motor1.throttle = 0
+		kit.motor2.throttle = 0
+	self.val = on
+def toggle_canon_auto(self, on):
+	self.val = on
 data = {
 	'move': {
 		'com': { # command
-			'pos': [0, 0],
-			'dir': [0, 0],
-			'vel': [0, 0]
+			'pos': Object(val=[0,0], onchange=update_data),
+			'dir': Object(val=[0,0], onchange=update_data),
+			'vel': Object(val=[0,0], onchange=update_move_vel)
 		},
 		'real': { # actual value
-			'pos': [0, 0],
-			'dir': [0, 0],
-			'vel': [0, 0]
+			'pos': Object(val=[0,0], onchange=update_data),
+			'dir': Object(val=[0,0], onchange=update_data),
+			'vel': Object(val=[0,0], onchange=update_data)
 		},
 		'auto': { # automatic mode
-			'on': False,
-			'target': [0, 0]
+			'on': Object(val=False, onchange=toggle_move_auto),
+			'target': Object(val=[0,0], onchange=update_data)
 		}
 	},
 	'cannon': {
 		'com': {
-			'yaw': 0,
-			'pitch': 0
+			'yaw': Object(val=0, onchange=update_data),
+			'pitch': Object(val=0, onchange=update_data)
 		},
 		'real': {
-			'yaw': 0,
-			'pitch': 0
+			'yaw': Object(val=0, onchange=update_data),
+			'pitch': Object(val=0, onchange=update_data)
 		},
-		'auto': {'on': False}
+		'auto': {'on': Object(val=False, onchange=toggle_canon_auto),}
 	}	
 };
 
-def rotate_wheels(vel):
-	kit.motor1.throttle = vel[0];
-	kit.motor2.throttle = vel[1];
 
-set_timer('read_imgframe', 1/10)
+set_timer('read_imgframe', 1/30)
 set_timer('stream_imgframe', 1/10) # 10 fps
 set_timer('sockalive', 1) 
 set_timer('sockconnect', 1)
@@ -186,6 +197,7 @@ while True:
 	#camera_jpegbytes = httpvideo.getFrameImg()
 	#camera_frame = cv2.imdecode( np.frombuffer(camera_jpegbytes, dtype=np.uint8), cv2.IMREAD_COLOR)
 	
+	# read new camera frame
 	if check_timer('read_imgframe'):
 		ret, camera_frame = cap.read()
 		if not ret: 
@@ -193,11 +205,8 @@ while True:
 			break
 		#cv2.imshow('videostream', camera_frame)
 	
-	# compute tank pos, speed
-	
-	# apply speed
-	rotate_wheels( data['move']['com']['vel'] )
-	#if check_timer('velcheck') : print(data['move']['com']['vel'])
+		# compute tank pos, speed
+		
 	
 	# check for connection requests
 	if check_timer('sockconnect'):
@@ -211,7 +220,7 @@ while True:
 	if check_timer('stream_imgframe'):
 		camera_jpegbytes = cv2.imencode('.jpeg', camera_frame)[1].tobytes()
 		
-		for addr in camserv.data['streams']:
+		for addr in list(camserv.data['streams']):
 			camserv.serv.sendraw(
 				bytes(
 					"--frame\r\n" +
@@ -232,6 +241,7 @@ while True:
 
 
 # TODO:
+#	- check regularly that vel data is received if vel is set to something other than 0,0
 # 	- optimize code:
 #		- for ... in list(...dict...)
 #		- use dict for url dispatcher ?

@@ -89,15 +89,45 @@ function unlatch_targetpospicker(){
 	pospicker_tank = null;
 }
 
-let velconvert = vel => vel.map(part => (part>0 && part<0.1 || part<0 && part>-0.1) ? 0 : part/2);
+// return = [left wheel speed, right wheel speed]
+function velconvert(vel){
+	const DEADZONE = 0.2;
+	const LVS = [
+		[2/3, 1/3], // max. dist, corresponding motor speed
+		[10, 2/3]
+	]
+	const PI6 = Math.PI/6;
+	const ZONES = [ // slices of PI/6
+		[1, -1],  // turn right 1
+		[1, 0.5], // go right
+		[1, 1],   // go forward 1
+		[1, 1],   // go forward 2
+		[0.5, 1], // go left
+		[-1, 1],  // turn left 1
+		[-1, 1]   // turn left 2
+	];
+	
+	let dist = (vel[0]**2 + vel[1]**2)**0.5;
+	if (dist < DEADZONE) return [0,0];
+	
+	let angle = Math.atan2(vel[1], vel[0]);
+	if (angle < 0) angle = 2*Math.PI+angle;
+	
+	let ind = Math.trunc(angle/PI6);
+	if (ind >= ZONES.length) return [0,0];
+	
+	let speed = LVS.find(lv => lv[0]>=dist)[1];
+	return [ ZONES[ind][0]*speed, ZONES[ind][1]*speed ];
+}
 
 class Loop{
-	constructor(fun, on_stop, types=[]){
+	constructor(fun, on_stop, types=[], delay=0){
 		this.id = uniqueids[1]();
 		this.fun = fun;
 		this.types = types;
 		this.on_stop = on_stop;
 		this.stopped = false;
+		this.delay = delay;
 	}
 	addToPool(pool){
 		this.types.forEach(type => {
@@ -119,7 +149,12 @@ class Loop{
 		this.stopped = true;
 		return this;
 	}
-	rec(){ if (!this.stopped) this.fun(this); }
+	rec(){
+		if (!this.stopped){
+			if (this.delay == 0) this.fun(this);
+			else window.setTimeout( ()=>this.fun(this), this.delay );
+		}
+	}
 }
 let tanks = [];
 class Tank{
@@ -221,7 +256,7 @@ class Tank{
 		let path = '/'+parts.join('/');
 		let obj = this[parts[0]][parts[1]][parts[2]];
 		this.setData(
-			path, `${x.toFixed(1)};${y.toFixed(1)}`, 
+			path, `${x.toFixed(4)};${y.toFixed(4)}`, 
 			() => {
 				[obj[0], obj[1]] = [x, y];
 				this.dispmsg(`${path} set to (${x};${y})`);
@@ -237,11 +272,11 @@ class Tank{
 			() => setNodesVals(nodes, obj)
 		);
 	}
-	setVec2dFromLoop(parts, x, y, loop){
+	setVec2dFromLoop(parts, x, y, loop=null){ // loop is actually optional
 		let path = '/'+parts.join('/');
 		let obj = this[parts[0]][parts[1]][parts[2]];
 		this.setData(
-			path, `${x.toFixed(1)};${y.toFixed(1)}`, 
+			path, `${x.toFixed(4)};${y.toFixed(4)}`, 
 			() => [obj[0], obj[1]] = [x, y], 
 			(code, status) => this.dispmsg(`error setting ${path} (${code} ${status})`),
 			err => this.dispmsg(`error setting ${path} (${err})`),
@@ -342,33 +377,30 @@ class Tank{
 	
 	// sends new request once the answer to the previous one arrives
 	// HTTP1.1 connections are "keep alive" by default so this should be fine in terms of latency 
-	getLoop(fun){ new Loop(fun, noop, ['GET']).addToPool(this.loops).rec(); }
+	getLoop(fun, delay=500){ new Loop(fun, noop, ['GET'], delay).addToPool(this.loops).rec(); }
 	getPosLoop(){ this.getLoop( loop => this.getVec2d(['move', 'real', 'pos'], false, loop) ) }
 	getDirLoop(){ this.getLoop( loop => this.getVec2d(['move', 'real', 'dir'], false, loop) ) }
 	
-	gamepadUpdateLoop(delay=100){ // update our gamepad object
+	gamepadUpdateLoop(delay=50){ // update our gamepad object
 		new Loop(loop => {
-			if (!this.gamepad.on || this.gamepad.obj === null) this.stopLoop(loop);
-			else {
-				this.gamepad.obj = navigator.getGamepads()[this.gamepad.ind];
-				window.setTimeout(loop.rec.bind(loop), delay);
-			}
-		},
-		noop, ['gamepad'])
-		.addToPool(this.loops).rec();
+				if (!this.gamepad.on || this.gamepad.obj === null) this.stopLoop(loop);
+				else {
+					this.gamepad.obj = navigator.getGamepads()[this.gamepad.ind];
+					
+					// send new data
+					this.gamepadSetVel();
+					// ...
+					
+					loop.rec(loop);
+				}
+			},
+			noop, ['gamepad'], delay
+		).addToPool(this.loops).rec();
 	}
-	gamepadSetLoop(fun){ new Loop(fun, noop, ['SET','gamepad']).addToPool(this.loops).rec(); }
-	gamepadVelLoop(){
-		if (!this.gamepad.on || this.gamepad.obj === null) return;
-		
-		this.gamepadSetLoop(loop => {
-			if (!this.gamepad.on || this.gamepad.obj === null) this.stopLoop(loop);
-			else {
-				let [x, y] = velconvert([this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]]);
-				console.log(x, y);
-				this.setVec2dFromLoop(['move', 'com', 'vel'], x, y, loop);
-			}
-		});
+	gamepadSetVel(){
+		let [x, y] = velconvert([this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]]);
+		if (x != this.move.com.vel[0] || y != this.move.com.vel[1])
+			this.setVec2dFromLoop(['move', 'com', 'vel'], x, y);
 	}
 	
 	refresh(){
@@ -380,7 +412,6 @@ class Tank{
 		// set values
 		getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).forEach(el => el.click());
 		getdom(`.div_tank[tankid="${this.id}"] .div_radiozone input[checked]`).forEach(el => el.click());
-		this.gamepadVelLoop();
 		// get values
 		this.getBool( ['move', 'auto'] );
 		this.getBool( ['cannon', 'auto'] );
@@ -393,8 +424,8 @@ class Tank{
 		if (on && this.gamepad.obj !== null){ // start gamepad loops
 			this.stopLoops(['gamepad']);
 			this.gamepadUpdateLoop();
-			this.gamepadVelLoop();
 		}
+		else if (!on) this.setVec2dFromLoop(['move', 'com', 'vel'], 0, 0); // stop motors
 	}
 	connectGamepad(gamepad){
 		this.gamepad.obj = gamepad;
@@ -402,6 +433,7 @@ class Tank{
 	}
 	disconnectGamepad(){
 		this.gamepad.obj = null;
+		this.setVec2dFromLoop(['move', 'com', 'vel'], 0, 0); // stop motors
 	}
 	
 	draw(){
@@ -532,7 +564,6 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
-	. send vel=0 on gamepad disconnect / disable
 	. canvas add axes, scaling
 	. canvas support scroll / zoom
 	. use input type number
