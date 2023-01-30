@@ -1,5 +1,5 @@
 from util import * # util.py
-import positioning # positionin.py
+from positioning import getWorldTransform # positioning.py
 
 import cv2
 import cv2.aruco as aruco
@@ -191,7 +191,6 @@ set_timer('stream_imgframe', 1/10) # 10 fps
 set_timer('sockalive', 1) 
 set_timer('sockconnect', 1)
 while True:
-	#global camera_frame, camera_jpegbytes, tankpos, tank_realspeed, tank_targetspeed
 	timers_start()
 	
 	#camera_jpegbytes = httpvideo.getFrameImg()
@@ -206,7 +205,10 @@ while True:
 		#cv2.imshow('videostream', camera_frame)
 	
 		# compute tank pos, speed
-		
+		transfo = getWorldTransform(camera_frame)
+		if transfo is not None:
+			data['move']['real']['dir'].val = [1,0]
+			data['move']['real']['pos'].val = [transfo[1][0][0], transfo[1][1][0]]
 	
 	# check for connection requests
 	if check_timer('sockconnect'):

@@ -65,7 +65,11 @@ let canvas = getdom('canvas')[0];
 let canvasW = canvas.width; let canvasH = canvas.height;
 let ctx = canvas.getContext('2d');
 ctx.scale(1, -1);           // set y axis pointing up
-ctx.translate(0, -canvasH); // origin at bottom left
+ctx.translate(canvasW/2, -canvasH/2); // origin at bottom left
+
+let BASE_MIN = 5; // min canavs size in meters
+let mPERpx = BASE_MIN/Math.min(canvasW, canvasH);
+ctx.scale(1/mPERpx, 1/mPERpx);
 
 let pospicker_tank = null;
 
@@ -193,7 +197,7 @@ class Tank{
 		
 		this.color = color === null ? Tank.colors[ Tank.colors.length % (this.id+1) ] : color;
 		this.path = new Path2D();
-		let base = 10; let height = 20;
+		let base = 0.2; let height = 0.4; // in m
 		this.path.moveTo(-base/2,0);
 		this.path.lineTo(base/2, 0);
 		this.path.lineTo(0, height);
@@ -441,13 +445,15 @@ class Tank{
 		ctx.save();
 		ctx.translate(...this.move.auto.target);
 		ctx.scale(1,-1);
-		ctx.drawImage(this.pickerImg, 0, -this.pickerImg.height);
+		let imgw = this.pickerImg.width*mPERpx; 
+		let imgh = this.pickerImg.height*mPERpx; 
+		ctx.drawImage(this.pickerImg, 0, -imgh, imgw, imgh);
 		ctx.restore();
 		// draw tank
 		ctx.save();
 		ctx.fillStyle = this.color;
-		ctx.translate(...this.move.real.pos);
-		ctx.rotate(-Math.tan(this.move.real.dir[1] / this.move.real.dir[0]));
+		ctx.translate(this.move.real.pos[0], this.move.real.pos[1]);
+		ctx.rotate(-Math.atan2(this.move.real.dir[1], this.move.real.dir[0]));
 		ctx.fill(this.path);
 		ctx.restore();
 	}
@@ -525,10 +531,12 @@ function in_gamepadind(nodes){
 function toggle_camerafeed(node){ getdom('img', node.parentNode)[0].style.display = node.checked ? 'block' : 'none'; }
 
 
-let fps = 25;
+let fps = 20;
 window.setInterval(() => {
+	let canvasW_m = canvasW*mPERpx;
+	let canvasH_m = canvasH*mPERpx;
 	
-	ctx.clearRect(0,0, canvasW, canvasH);
+	ctx.clearRect(-canvasW_m/2, -canvasH_m/2, canvasW_m, canvasH_m);
 	tanks.forEach( tank => tank.draw() );
 	
 }, 1000/fps)
@@ -540,10 +548,14 @@ canvas.addEventListener("click", ev => {
 	if (pospicker_tank !== null){
 		ev.preventDefault();
 		
-		let [x, y] = [ ev.pageX - canvas.getBoundingClientRect().left, canvasH - (ev.pageY - canvas.getBoundingClientRect().top) ];
+		let invMat = ctx.getTransform().inverse();
+		let [x, y] = [ ev.pageX - canvas.getBoundingClientRect().left, ev.pageY - canvas.getBoundingClientRect().top ];
+		x = x * invMat.a + y * invMat.c + invMat.e;
+		y = y * invMat.b + y * invMat.d + invMat.f;
+		
 		let textfields = getdom(`.input_targetpos[tankid='${pospicker_tank.id}']`);
-		textfields[0].value = x.toFixed(2);
-		textfields[1].value = y.toFixed(2);
+		textfields[0].value = x.toFixed(4);
+		textfields[1].value = y.toFixed(4);
 		textfields.forEach(el => el.dispatchEvent(new Event("input")));
 		getdom('.btn_ok', textfields[0].parentNode)[0].click();
 		
@@ -564,7 +576,7 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
-	. canvas add axes, scaling
+	. canvas add axes
 	. canvas support scroll / zoom
 	. use input type number
 */
