@@ -17,15 +17,15 @@ PPM = 1920/0.476 # pixels/m
 print(f"Pixels/meter set to {PPM}, make sure this is correct !")
 charuco_cell_size = 0.05; # in meters
 print(f"Aruco cell size set as {charuco_cell_size} m, make sure this is correct !")
-charuco_cell_psize = charuco_cell_size * PPM # in pixels
+charuco_cell_psize = round(charuco_cell_size * PPM) # in pixels
 charuco_nbcells_w = 7
 charuco_nbcells_h = 5
 aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
 aruco_params = aruco.DetectorParameters_create()
 charuco_board = aruco.CharucoBoard_create(charuco_nbcells_w, charuco_nbcells_h, charuco_cell_psize, charuco_cell_psize/2, aruco_dict)
 
-charuco_boardimg = charuco_board.draw( [round(charuco_nbcells_w*charuco_cell_psize), round(charuco_nbcells_h*charuco_cell_psize)] )
-#cv2.imwrite('calibration_board-6X6_250.jpg', charuco_board.draw([400, 800]))
+charuco_boardimg = charuco_board.draw([charuco_nbcells_w*charuco_cell_psize*2, charuco_nbcells_h*charuco_cell_psize*2])
+cv2.imwrite('calibration_board-6X6_250.jpg', charuco_boardimg)
 #print("Created calibration board image file")
 
 # generate calibration data

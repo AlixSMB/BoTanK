@@ -4,8 +4,8 @@ from positioning import getWorldTransform # positioning.py
 import cv2
 import cv2.aruco as aruco
 import numpy as np
-#from adafruit_motorkit import MotorKit
-#kit = MotorKit()
+from adafruit_motorkit import MotorKit
+kit = MotorKit()
 
 
 class CtrlPanelServer:
@@ -14,7 +14,7 @@ class CtrlPanelServer:
 		self.dietimeout = dietimeout
 		self.data = data
 		self.on_msg = on_msg
-	
+
 	def checkdead(self):
 		for addr in list(self.serv.con.remotes): # list(...) because we can't modify the dict size and iterate it at the same time
 			if self.serv.con.remotes[addr].nodata_elapsed() >= self.dietimeout:
@@ -36,16 +36,34 @@ def timers_end():
 
 # receive camera feed
 #httpvideo = HTTPVideoStream('192.168.1.173', '8080', '/video/mjpeg')
-cap = cv2.VideoCapture(0)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 10000)  # get max. res
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 10000) # of camera
-cap.set(cv2.CAP_PROP_FPS, 100)     # high framerate and low exposure time
-cap.set(cv2.CAP_PROP_EXPOSURE, -5) # should help minimize motion blur
+camW = 1280
+camH = 720
+cam_sendS = 0.2
+cam_sendW = round(cam_sendS*camW)
+cam_sendH = round(cam_sendS*camH)
+GST_STRING = \
+        'nvarguscamerasrc ! '\
+        'video/x-raw(memory:NVMM), width={capture_width}, height={capture_height}, format=(string)NV12, framerate=(fraction){fps}/1 ! '\
+        'nvvidconv ! '\
+        'video/x-raw, width=(int){width}, height=(int){height}, format=(string)BGRx ! '\
+        'videoconvert ! '\
+        'video/x-raw, format=(string)BGR ! '\
+        'appsink'.format(
+                width=camW,
+                height=camH,
+                fps=60,
+                capture_width=camW,
+                capture_height=camH
+        )
+cap = cv2.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER)
+#cap = cv2.VideoCapture("videotest.mp4")
+
+#cap.set(cv2.CAP_PROP_EXPOSURE, -5) # should help minimize motion blur
 print(f"Video res.: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
 print(f"Video FPS: {cap.get(cv2.CAP_PROP_FPS)}")
 print(f"Video exposure: {cap.get(cv2.CAP_PROP_EXPOSURE)}")
 
-print(f"Local IP addresses: {getLocalIps()}")
+#print(f"Local IP addresses: {getLocalIps()}")
 
 def httpserv_sendvec2d(serv, addr, vec):
 	serv.sendraw(http_txtresp(
@@ -73,7 +91,7 @@ def localcam_onmsg(self, addr):
 				'Cache-Control: no-cache\r\n' +
 				'Content-Type: multipart/x-mixed-replace; boundary=frame\r\n\r\n'
 			, 'utf-8'), addr)
-			if sent is True : self.data['streams'].add(addr)
+			if sent : self.data['streams'].add(addr)
 		else:
 			self.serv.sendraw(http_empty(400, 'BAD REQUEST'), addr)
 		
@@ -130,13 +148,13 @@ def coms_onmsg(self, addr):
 ctrlpanel = { 
 	# local cam mjpeg streaming server
 	'localcamera': CtrlPanelServer(
-		8080, 3, localcam_onmsg,
+		81, 3, localcam_onmsg,
 		on_close=lambda panel, addr: panel.data['streams'].discard(addr), 
 		data={'streams': set()}
 	),
 	# communication server (HTTP REST API)
 	'coms': CtrlPanelServer(
-		8081, 10, coms_onmsg
+		82, 10, coms_onmsg
 	)
 }
 camserv = ctrlpanel["localcamera"]
@@ -145,8 +163,8 @@ def update_data(self, val):
 	self.val = val
 def update_move_vel(self, vel):
 	if not data['move']['auto']['on'].val:
-		#kit.motor1.throttle = vel[0]
-		#kit.motor2.throttle = vel[1]
+		kit.motor1.throttle = vel[0]
+		kit.motor2.throttle = vel[1]
 		self.val = vel
 def toggle_move_auto(self, on):
 	if on:
@@ -185,7 +203,6 @@ data = {
 	}	
 };
 
-
 set_timer('read_imgframe', 1/30)
 set_timer('stream_imgframe', 1/10) # 10 fps
 set_timer('sockalive', 1) 
@@ -220,7 +237,7 @@ while True:
 	
 	# stream camera
 	if check_timer('stream_imgframe'):
-		camera_jpegbytes = cv2.imencode('.jpeg', camera_frame)[1].tobytes()
+		camera_jpegbytes = cv2.imencode('.jpeg', cv2.resize(camera_frame, (cam_sendW,cam_sendH)))[1].tobytes()
 		
 		for addr in list(camserv.data['streams']):
 			camserv.serv.sendraw(
@@ -243,9 +260,15 @@ while True:
 
 
 # TODO:
+
+
+
+
+# 	- sockets: use threads with blocking mode ?
+#	- stream video using webrtc ?
+#	- stream video using different process ?
 #	- check regularly that vel data is received if vel is set to something other than 0,0
 # 	- optimize code:
 #		- for ... in list(...dict...)
 #		- use dict for url dispatcher ?
 #	- handle timers differently ?
-# 	- compile framing with optimization enabled

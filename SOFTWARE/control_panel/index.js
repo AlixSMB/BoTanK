@@ -1,5 +1,8 @@
 'use strict';
 
+const CAMFEED_PORT = 81;
+const COM_PORT = 82;
+
 let getdom = (str, el=document) => [...el.querySelectorAll(str)];
 let uniqueid_gen = function(){
 	let tmp = -1;
@@ -216,7 +219,7 @@ class Tank{
 	
 	setAddr(addr){
 		this.net.addr = addr;
-		getdom(`img[tankid="${this.id}"]`)[0].src = `http://${this.net.addr}:8080/video/mjpeg?t=${new Date().getTime()}`; // date is necessary to refresh the video stream
+		getdom(`img[tankid="${this.id}"]`)[0].src = `http://${this.net.addr}:${CAMFEED_PORT}/video/mjpeg?t=${new Date().getTime()}`; // date is necessary to refresh the video stream
 	}
 	toggleNeterror(on){
 		this.net.stop = on;
@@ -238,7 +241,7 @@ class Tank{
 			return;
 		}
 		
-		fetch(`http://${this.net.addr}:8081${path}`, {method: 'PUT', body: data})
+		fetch(`http://${this.net.addr}:${COM_PORT}${path}`, {method: 'PUT', body: data})
 		.then(res => {
 			if (res.ok){
 				on_ok();
@@ -317,7 +320,7 @@ class Tank{
 			return;
 		}
 		
-		fetch(`http://${this.net.addr}:8081${path}`, {method: 'GET'})
+		fetch(`http://${this.net.addr}:${COM_PORT}${path}`, {method: 'GET'})
 		.then(res => {
 			if (res.ok) res.text().then(txt => {
 					on_ok(txt);

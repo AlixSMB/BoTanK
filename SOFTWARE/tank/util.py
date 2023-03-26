@@ -1,4 +1,5 @@
 import socket
+import errno
 import httptools
 import time
 from hashlib import sha1
@@ -65,7 +66,7 @@ class TCPServer:
 	def connect(self):
 		try: 
 			remotesock, addr = self.sock.accept()
-			remotesock.setblocking(0)
+			#remotesock.setblocking(0)
 			print(f"Remote connection from {addr[0]}:{addr[1]}")
 			self.remotes[addr] = SockInfo(remotesock, addr)
 			return addr
@@ -79,7 +80,7 @@ class TCPServer:
 	def recv(self, addr):
 		try:
 			remote = self.remotes[addr]
-			data = remote.sock.recv(4096)
+			data = remote.sock.recv(4096, socket.MSG_DONTWAIT)
 			remote.lastexch = time.perf_counter()
 			return data
 		except:
@@ -87,12 +88,11 @@ class TCPServer:
 	def send(self, data, addr):
 		try:
 			remote = self.remotes[addr]
-			remote.sock.sendall(data)
+			sent = remote.sock.sendall(data)
 			remote.lastexch = time.perf_counter()
 			return True
-		except socket.error: # socket disconnected
+		except:
 			return None
-		return False
 class HttpParserHandler:
 	def __init__(self):
 		self.parser = httptools.HttpRequestParser(self)
@@ -178,10 +178,10 @@ class HTTPServer:
 	
 	def sendraw(self, data, addr):
 		sent = self.con.send(data, addr)
-		if sent is None: # disconnect
+		if sent is None : # disconnect
 			self.close(addr)
 			return False
-		else : return True
+		else : return sent
 
 
 def http_empty(code, status):

@@ -13,8 +13,8 @@ aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
 detect_params = aruco.DetectorParameters_create()
 charuco_cell_size = 0.05; # in meters
 print(f"Charuco cell size set as {charuco_cell_size} m")
-charuco_nbcells_w = 6 # the order is 
-charuco_nbcells_h = 8 # important here !
+charuco_nbcells_w = 7 *3 # the order is 
+charuco_nbcells_h = 5 *3 # important here !
 print(f"Charuco board has dimensions {charuco_nbcells_w}x{charuco_nbcells_h} cells")
 aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
 aruco_params = aruco.DetectorParameters_create()
