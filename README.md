@@ -2,7 +2,7 @@
 Projet tank intelligent
 
 ## Interface de commande
-- Site web
+- Web app locale
 - Serveur HTTP/1.1 sur le tank
 - Communication bi-directionnelle via API REST (GET/PUT)
 - Stream {tank -> interface de commande} de caméra / position / direction / vitesse
