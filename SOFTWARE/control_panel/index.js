@@ -98,33 +98,16 @@ function unlatch_targetpospicker(){
 
 // return = [left wheel speed, right wheel speed]
 function velconvert(vel){
-	const DEADZONE = 0.2;
-	const LVS = [
-		[2/3, 1/3], // max. dist, corresponding motor speed
-		[10, 2/3]
-	]
-	const PI6 = Math.PI/6;
-	const ZONES = [ // slices of PI/6
-		[1, -1],  // turn right 1
-		[1, 0.5], // go right
-		[1, 1],   // go forward 1
-		[1, 1],   // go forward 2
-		[0.5, 1], // go left
-		[-1, 1],  // turn left 1
-		[-1, 1]   // turn left 2
-	];
+	vel[0] *= 0.3
+	vel[1] *= 0.3
 	
+	const DEADZONE = 0.2;
 	let dist = (vel[0]**2 + vel[1]**2)**0.5;
 	if (dist < DEADZONE) return [0,0];
 	
-	let angle = Math.atan2(vel[1], vel[0]);
-	if (angle < 0) angle = 2*Math.PI+angle;
-	
-	let ind = Math.trunc(angle/PI6);
-	if (ind >= ZONES.length) return [0,0];
-	
-	let speed = LVS.find(lv => lv[0]>=dist)[1];
-	return [ ZONES[ind][0]*speed, ZONES[ind][1]*speed ];
+	let angle = Math.atan2(vel[1], vel[0]);	
+	if (angle >= -Math.PI/2 && angle <= Math.PI/2) return [dist, vel[1]]; // right half
+	else                                           return [vel[1], dist]; // left half
 }
 
 class Loop{
@@ -579,6 +562,7 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
+	. add input to select speed factor for manual / auto control
 	. canvas add axes
 	. canvas support scroll / zoom
 	. use input type number
