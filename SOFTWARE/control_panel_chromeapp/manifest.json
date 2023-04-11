@@ -1,0 +1,20 @@
+{
+	"manifest_version": 2,
+	"name": "Tanks control panel",
+	"description": "Control tanks, receive real-time data",
+	"version": "1.0",
+	"app": {
+		"background": {
+			"scripts": ["background.js"]
+		}
+	},
+	"sockets": {
+		"udp": {
+			"bind": ["*:*"],
+			"send": ["*:*"]
+		},
+		"tcp" : {
+			"connect": ["*:*"]
+		}
+	}
+}

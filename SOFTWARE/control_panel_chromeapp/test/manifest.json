@@ -1,0 +1,19 @@
+{
+	"manifest_version": 2,
+	"name": "UDP test",
+	"description": "UDP test",
+	"version": "1.0",
+	"app": {
+		"background": {
+			"scripts": ["background.js"]
+		}
+	},
+	"sockets": {
+		"udp": {
+			"bind": ["*:*"]
+		},
+		"tcp" : {
+			"connect": ["*:*"]
+		}
+	}
+}
