@@ -61,51 +61,78 @@ class VideoCapture:
 		return ret, frame
 
 # Connections with only 1 other device
+i=0
 class UDP:
-	def __init__(self, addr, port):
+	def __init__(self, addr, port_in=None, port_out=None):
 		self.addr = addr
-		self.port = port
+		self.port_in = port_in
+		self.port_out = port_out
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-		self.sock.bind((addr, port))
-		#self.sock.setblocking(0) # non blocking
+		if port_in is not None : self.sock.bind(('0.0.0.0', port_in))
+		self.sock.setblocking(0) # non blocking
 	
 	def send(self, data):
-		self.sock.sendto(data, (self.addr, self.port))
+		total = 0
+		sz = len(data)
+		while total < sz : total += self.sock.sendto(data[total:], (self.addr, self.port_out))
 	def recv(self, size=4096):
-		return self.sock.recv(size, socket.MSG_DONTWAIT)
+		try:
+			return self.sock.recv(size)
+		except:
+			return None	
 class TCPServer:
-	def __init__(self, addr, port):
+	def __init__(self, addr, port, deadtimeout=3):
 		self.addr = addr
 		self.port = port
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-		self.sock.bind((addr, port))
-		self.sock.listen(1) 
-		#self.sock.setblocking(0)
+		self.sock.bind(('0.0.0.0', port))
+		self.sock.listen()
+		self.con = False
+		self.sock.setblocking(0) # non-blocking for 'accept'
 		
 		self.lastexch = time.perf_counter() # last time data was transmitted
+		self.timeout = deadtimeout
 	
 	def nodata_elapsed(self): # in s
 		return time.perf_counter() - self.lastexch
+	def checkdead(self):
+		if self.con and self.nodata_elapsed() > self.timeout : self.disconnect()
 	
 	def connect(self):
-		remotesock, addr = self.sock.accept()
-		#remotesock.setblocking(0)
-		print(f"Remote connection from {addr[0]}:{addr[1]}")
+		if self.con : return # if socket is already connected do nothing
+		
+		try:
+			remotesock, addr = self.sock.accept()
+		except:
+			return
+		self.con = True
+		self.rsock = remotesock
+		self.rsock.setblocking(0)
+		self.lastexch = time.perf_counter()
+		print(f"Remote connection from {addr[0]}:{addr[1]} started")
 	def disconnect(self):
-		print(f"Remote connection from {self.addr}:{self.port} ended")
-		self.sock.close()
+		print(f"Remote connection from {self.addr} ended")
+		self.rsock.close()
+		self.con = False
 	
 	def recv(self, size=4096):
+		if not self.con : return None
 		try:
-			data = self.sock.recv(size, socket.MSG_DONTWAIT)
-			self.lastexch = time.perf_counter()
-			return data
+			data = self.rsock.recv(size)
+			if (len(data) != 0):
+				self.lastexch = time.perf_counter()
+				return data
+			else : return None
+		#except socket.error, err:
+		#	if err.errno == errno.ECONNRESET : self.disconnect()
 		except:
 			return None
 	def send(self, data):
 		try:
-			sent = self.sock.sendall(data)
+			sent = self.rsock.sendall(data)
 			self.lastexch = time.perf_counter()
 			return True
+		#except socket.error, err:
+		#	if err.errno == errno.ECONNRESET : self.disconnect()
 		except:
 			return False

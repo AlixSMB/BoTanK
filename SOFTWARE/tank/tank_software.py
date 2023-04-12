@@ -1,3 +1,5 @@
+# Note for windows CMD: if QuickEdit mode is enabled, clicking the console freezes the script until a keyboard key is pressed... 
+
 from util import * # util.py
 from positioning import getBoardTransform # positioning.py
 
@@ -5,6 +7,7 @@ import cv2
 import numpy as np
 #from adafruit_motorkit import MotorKit
 #kit = MotorKit()
+kit = Object(motor1=Object(throttle=0), motor2=Object(throttle=0))
 import math
 import time
 
@@ -29,60 +32,88 @@ GST_STRING = \
 			capture_width=camW,
 			capture_height=camH
 	)
-#cap = VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) # from util.py [!]
-cap = VideoCapture(0)
+#cap = cv2.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) #VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) # from util.py [!]
+cap = cv2.VideoCapture(0) #VideoCapture(0)
 
-#cap.set(cv2.CAP_PROP_EXPOSURE, 1) # should help minimize motion blur
+#cap.set(cv2.CAP_PROP_EXPOSURE, -5) # set to 0.25 auto-adjust
 print(f"Video res.: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
 print(f"Video FPS: {cap.get(cv2.CAP_PROP_FPS)}")
 #print(f"Video exposure: {cap.get(cv2.CAP_PROP_EXPOSURE)}")
 
-ADDR_CTRLPANEL = 127.0.0.1
+ADDR_CTRLPANEL = "127.0.0.1"#"10.7.252.35"
+print(f"Control panel IP set to {ADDR_CTRLPANEL}")
 PORT_CAM = 81
-PORT_COMS = 82
+PORT_OPTS = 82
+PORT_COMS_IN = 82
+PORT_COMS_OUT = 83
 net = Object(
-	'out_cam'= UDP(ADDR_CTRLPANEL, PORT_CAM),
-	'inout_move'= UDP(ADDR_CTRLPANEL, PORT_COMS),
-	'server_opts'= TCPServer(ADDR_CTRLPANEL, PORT_COMS)
+	out_cam = UDP(ADDR_CTRLPANEL, None, PORT_CAM),
+	inout_move = UDP(ADDR_CTRLPANEL, PORT_COMS_IN, PORT_COMS_OUT),
+	server_opts = TCPServer(ADDR_CTRLPANEL, PORT_OPTS)
 )
 
-# data is like:
-# move,com,vel;0.3201,0.9732
-# cannon,com,yaw;0.326
-# move,auto,on;1
+''' data is like:
+ udp: 
+ 	move,com,vel;0.3201,0.9732
+ 	cannon,com,yaw;0.326
+	...
+ tcp request:
+	GET
+	move,real,pos
+	move,real,dir
+
+	SET
+	move,auto,on;1
+	
+	...
+ tcp response:
+	move,real,pos
+	move,real,dir
+
+	OK
+	
+	...
+note: the empty lines serve to delimit different messages 
+'''
 def recv_setdata(lines):
 	for line in lines:
 		if line == '' : continue
 		path, vals = [el.split(',') for el in line.split(';')]
 		
 		obj = dict_get(data, path)
-		if path[-1] == 'on' : obj.val.onchange(True if vals[0] == '1' else False)
+		if path[-1] == 'on' : obj.onchange(True if vals[0] == '1' else False)
 		else:
 			for i in range(len(vals)) : vals[i] = float(vals[i])
-			if len(vals) == 1 : obj.val.onchange(vals[0])
-			else              : obj.val.onchange(vals)
-def recv_move_data(data):
-	recv_setdata(data.decode('ascii').split('\n'))
-def recv_opts_data(server, data):
-	lines = data.decode('ascii').split('\n')
-	
-	if lines[0] == 'GET':
-		res = ''
-		for line in lines[1:]:
-			if line == '' : continue
-			
-			path = line.split(',')
-			obj = dict_get(data, path)
-			
-			if path[-1] == 'on' : res += f"{line};{'1' if obj.val else '0'}\n"
-			else:
-				if isinstance(obj.val, list) : res += f"{line};{ ','.join([str(el) for el in obj.val]) }\n"
-				else                         : res += f"{line};{str(obj.val)}\n"
-		server.send(res.encode('ascii'))
+			if len(vals) == 1 : obj.onchange(vals[0])
+			else              : obj.onchange(vals)
+def recv_move_data(msg):
+	recv_setdata(msg.decode('ascii').split('\n'))
+def recv_opts_data(server, msg):
+	for part in msg.decode('ascii').split('\n\n'):
+		if part == '' : continue
 		
-	else: # SET
-		recv_setdata(lines[1:])
-def send_move_data(server):
+		lines = part.split('\n')
+		if lines[0] == 'GET':
+			res = ''
+			for line in lines[1:]:
+				if line == '' : continue
+				
+				path = line.split(',')
+				obj = dict_get(data, path)
+				
+				if path[-1] == 'on' : res += f"{line};{'1' if obj.val else '0'}\n"
+				else:
+					if isinstance(obj.val, list) : res += f"{line};{ ','.join([str(el) for el in obj.val]) }\n"
+					else                         : res += f"{line};{str(obj.val)}\n"
+			server.send( (res+'\n').encode('ascii') )
+			
+		elif lines[0] == 'SET':
+			recv_setdata(lines[1:])
+			server.send(b'OK\n\n')
+		
+		else: # heartbeat
+			server.send(b'OK\n\n')
+def send_move_data(server):	
 	msg = ''
 	for key1 in data:
 		part = data[key1]['real']
@@ -91,8 +122,8 @@ def send_move_data(server):
 			
 			if key2 == 'on' : msg += f"{key1},real,{key2};{'1' if obj.val else '0'}\n"
 			else:
-				if isinstance(obj.val, list) : res += f"{key1},real,{key2};{ ','.join([str(el) for el in obj.val]) }\n"
-				else                         : res += f"{key1},real,{key2};{str(obj.val)}\n"
+				if isinstance(obj.val, list) : msg += f"{key1},real,{key2};{ ','.join([str(el) for el in obj.val]) }\n"
+				else                         : msg += f"{key1},real,{key2};{str(obj.val)}\n"
 	server.send(msg.encode('ascii'))
 	
 # update data from coms channel (remote)
@@ -112,8 +143,8 @@ def toggle_canon_auto(self, on):
 def set_move_vel(vel):
 	vel[1] *= -1
 	data['move']['real']['vel'].val = vel
-	#kit.motor1.throttle = 0.9 if vel[0] > 0.9 else (-0.9 if vel[0] < -0.9 else vel[0]) 
-	#kit.motor2.throttle = 0.9 if vel[1] > 0.9 else (-0.9 if vel[1] < -0.9 else vel[1])
+	kit.motor1.throttle = 0.9 if vel[0] > 0.9 else (-0.9 if vel[0] < -0.9 else vel[0]) 
+	kit.motor2.throttle = 0.9 if vel[1] > 0.9 else (-0.9 if vel[1] < -0.9 else vel[1])
 data = {
 	'move': {
 		'com': { # command
@@ -164,9 +195,7 @@ def auto_move():
 	else                                          : set_move_vel([vel[1]*speed, dist*speed])
 
 set_timer('stream_imgframe', 1/20) # 20 fps
-
-print("Waiting for connection ...")
-net.server_opts.connect() # block until connection is received
+set_timer('stream_movedata', 1/10) # 10 fps
 while True:
 	timers_start()
 	
@@ -180,7 +209,7 @@ while True:
 	
 	# stream camera
 	if check_timer('stream_imgframe'):
-		camera_jpegbytes = cv2.imencode('.jpeg', cv2.resize(camera_frame, (cam_sendW,cam_sendH), [int(cv2.IMWRITE_JPEG_QUALITY), cam_quality]))[1].tobytes()
+		camera_jpegbytes = cv2.imencode('.jpeg', cv2.resize(camera_frame, (cam_sendW,cam_sendH)), [int(cv2.IMWRITE_JPEG_QUALITY), cam_quality])[1].tobytes()
 		net.out_cam.send(camera_jpegbytes)
 	
 	# compute tank pos, speed
@@ -191,18 +220,22 @@ while True:
 		
 		if data['move']['auto']['on'].val : auto_move()
 	
+	net.server_opts.checkdead() # will disconnect if remote connection hasn't sent data in a while
+	net.server_opts.connect() # will accept a connection if none is already established
+	
 	# handle received move message
-	data = net.inout_move.recv()
-	if data != None : recv_move_data(data)
+	msg = net.inout_move.recv()
+	if msg != None : recv_move_data(msg)
 	# handle received opts message
-	data = net.server_opts.recv()
-	if data != None : recv_opts_data(net.server_opts, data)
+	msg = net.server_opts.recv()
+	if msg != None : recv_opts_data(net.server_opts, msg)
 	
 	# send move messages
-	send_move_data(net.inout_move)
+	if check_timer('stream_movedata'):
+		send_move_data(net.inout_move)
 	
 	
-	if cv2.waitKey(1) == ord('q') : break
+	#if cv2.waitKey(1) == ord('q') : break
 	timers_end()
 
 
