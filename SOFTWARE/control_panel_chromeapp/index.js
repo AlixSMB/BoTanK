@@ -1,7 +1,9 @@
 'use strict';
 
 let cam_port = 81;
-let coms_port = 82;
+let opts_port = 82;
+let coms_port_in = 83;
+let coms_port_out = 82;
 
 let getdom = (str, el=document) => [...el.querySelectorAll(str)];
 let uniqueid_gen = function(){
@@ -10,14 +12,19 @@ let uniqueid_gen = function(){
 };
 let uniqueids = [uniqueid_gen(), uniqueid_gen(), uniqueid_gen()];
 let noop = ()=>{};
+let arr_last = arr => arr[arr.length-1];
 let obj_get = (obj, keys) => {
-	for (key of keys) obj = obj[key];
+	for (let key of keys) obj = obj[key];
 	return obj;
 };
-let arr_last = arr => arr[arr.length-1];
+let obj_set = (obj, keys, val) => {
+	for (let key of keys.slice(0,-1)) obj = obj[key];
+	obj[arr_last(keys)] = val;
+};
 
 function resetNodesVals(nodes) { nodes.forEach(node => node.value = node.getAttribute('oldvalue')); }
 function updateNodesVals(nodes){ nodes.forEach(node => node.setAttribute('oldvalue', node.value)); }
+
 function setNodesVals(nodes, vals){ nodes.forEach((node,ind) => {
 	node.value = vals[ind];
 	node.setAttribute('oldvalue', vals[ind]);
@@ -55,6 +62,8 @@ function set_inputzonebtns_callbacks(on_ok, n, tankdiv, inputtag){
 		this.parentNode.style.display = 'none';
 	} );
 }
+function set_inputzone_callback(el){ getdom('.in_inputzone', el).forEach(node => node.addEventListener( 'input', function(){getdom('div', this.parentNode)[0].style.display = 'inline';} )); }
+
 let html_radiozone = (name, values, checked=0, zoneattr='', attrs=null) => {
 	let radios = [...Array(values.length).keys()].map(ind => 
 		`<input 
@@ -89,51 +98,17 @@ let BASE_MIN = 5; // min canavs size in meters
 let mPERpx = BASE_MIN/Math.min(canvasW, canvasH);
 ctx.scale(1/mPERpx, 1/mPERpx);
 
-let pospicker_tank = null;
-
-function latch_targetpospicker(node){
-	let tank = tankfromnode(node);
-	canvas.style.cursor = `url('${tank.pickerUrl}') 0 24,auto`;
-	getdom('.btn_picktargetpos').forEach(el => {
-		el.style.animation = 'none';
-		el.style.boxShadow = null;
-	});
-	node.style.animation = null;
-	node.style.boxShadow = 'none';
-	pospicker_tank = tank;
-}
-function unlatch_targetpospicker(){
-	canvas.style.cursor = 'auto';
-	getdom('.btn_picktargetpos').forEach(el => {
-		el.style.animation = 'none';
-		el.style.boxShadow = null;
-	});
-	pospicker_tank = null;
-}
-
-// return = [left wheel speed, right wheel speed]
-function velconvert(vel){
-	vel[0] *= 0.3;
-	vel[1] *= 0.3;
-	
-	const DEADZONE = 0.2;
-	let dist = (vel[0]**2 + vel[1]**2)**0.5;
-	if (dist < DEADZONE) return [0,0];
-	
-	let angle = Math.atan2(vel[1], vel[0]);	
-	if (angle >= -Math.PI/2 && angle <= Math.PI/2) return [dist, vel[1]]; // right half
-	else                                           return [vel[1], dist]; // left half
-}
-
-// note: delay is absolute time elapsed (i.e: independant of time taken to execute fun)
+// [!] loops should be deleted/re-created after being stopped [!]
 class Loop{
-	constructor(fun, on_stop, types=[], delay=0){
+	constructor(fun, on_stop=noop, types=[], delay=0, harddelay=0, on_stophard=noop){
 		this.id = uniqueids[1]();
 		this.types = types;
 		
 		this.fun = fun;
 		this.delay = delay;
+		this.harddelay = harddelay;
 		this.on_stop = on_stop;
+		this.on_stophard = on_stophard;
 		
 		this.stopped = true;
 		this.indelay = false;
@@ -167,44 +142,80 @@ class Loop{
 		this.stopped = true;
 		return this;
 	}
+	hardstop(){ // max allowed timeout reached
+		if (this.stopped) return;
+		this.on_stophard();
+		this.stopped = true;
+	}
 	rec(){
 		if (!this.stopped && !this.infun && !this.indelay){
+			
+			let hardtimeout = null;
 			if (this.delay != 0){
 				this.indelay = true;
-				window.setTimeout( ()=>{this.indelay = false; this.rec();}, this.delay );
+				
+				if (this.harddelay != 0) hardtimeout = window.setTimeout( this.hardstop.bind(this), this.harddelay );
+				
+				window.setTimeout( ()=>{
+					this.indelay = false;
+					this.rec();
+				}, this.delay );
 			}
+			
 			this.infun = true;
-			this.fun( ()=>{this.infun = false; this.rec();} );
+			this.fun( ()=>{
+				this.infun = false;
+				if (hardtimeout !== null) window.clearTimeout(hardtimeout);
+				this.rec();
+			} );
 		}
 	}
 }
 
+// see: developer.chrome.com/docs/extensions/reference/sockets_udp
 let udp_streams = {}; // in udp streams
 chrome.sockets.udp.onReceive.addListener( info => {
 	//console.log(`Message from socket id "${info.socketId}" @${info.remoteAddress}:${info.remotePort}`);
 	if (info.socketId in udp_streams) udp_streams[info.socketId].on_recv(info.data);
 } );
 class UDPStream{
-	constructor(addr, port, on_recv=noop){
-		this.port = port;
+	constructor(addr, port_in=null, port_out=null, on_recv=noop){
+		this.port_in = port_in;
+		this.port_out = port_out;
 		this.on_recv = on_recv;
 		this.on = false;
 		this.setAddr(addr);
 	}
 	init(params={}){
+		if (this.on) return;
+		
 		chrome.sockets.udp.create(params, sockinfo => {
 			this.sockid = sockinfo.socketId;
-			udp_streams[this.sockid] = this;
-			chrome.sockets.udp.bind(this.sockid, this.addr, this.port, res => {
-				if (res < 0) console.log("Error binding udp socket");
-				else this.on = true;
+			
+			if (this.port_in == null){ // don't bind, we won't receive data, only send
+				this.on = true;
+				udp_streams[this.sockid] = this;
+			}
+			
+			else chrome.sockets.udp.bind(this.sockid, '0.0.0.0', this.port_in, res => {
+				if (res < 0){
+					chrome.sockets.udp.close(this.sockid);
+					console.log("Error binding udp socket");
+				}
+				else{
+					this.on = true;
+					udp_streams[this.sockid] = this;
+				}
 			});
 		});
 	}
-	send(data, callback=noop){
-		chrome.sockets.udp.send(this.sockid, data, this.addr, this.port, info => {
-			if (info.resultCode < 0) console.log("UDPStream send error");
-			callback();
+	send(data, callback, on_err){
+		chrome.sockets.udp.send(this.sockid, data, this.addr, this.port_out, info => {
+			if (info.resultCode < 0){
+				console.log("UDPStream send error");
+				on_err();
+			}
+			else callback();
 		})
 	}
 	setAddr(addr){
@@ -219,35 +230,44 @@ class UDPStream{
 		this.on = false;
 	}
 }
+// see: developer.chrome.com/docs/extensions/reference/sockets_tcp
 let tcp_streams = {}; // in tcp streams
 chrome.sockets.tcp.onReceive.addListener( info => {
 	if (info.socketId in tcp_streams) tcp_streams[info.socketId].on_recv(info.data);
 } );
 class TCPClient{
-	constructor(addr, port, on_con=noop, on_recv=noop){
+	constructor(addr, port, on_recv=noop){
 		this.port = port;
 		this.addr = addr;
 		this.on_recv = on_recv;
-		this.on_con = on_con;
 		this.on = false;
 		this.setAddr(addr);
 	}
-	init(){
+	init(on_con=noop, on_err=noop){
+		if (this.on) return;
+		
 		chrome.sockets.tcp.create({}, sockinfo => {
 			this.sockid = sockinfo.socketId;
-			tcp_streams[this.sockid] = this;
 			chrome.sockets.tcp.connect(this.sockid, this.addr, this.port, res => {
-				if (res < 0) console.log("Error connecting to tcp socket");
+				if (res < 0){
+					chrome.sockets.tcp.close(this.sockid);
+					console.log("Error connecting to tcp socket");
+					on_err();
+				}
 				else{
 					this.on = true;
-					this.on_con();
+					tcp_streams[this.sockid] = this;
+					on_con();
 				}
 			});
 		});
 	}
-	send(data){
+	send(data, on_err){
 		chrome.sockets.tcp.send(this.sockid, data, info => {
-			if (info.resultCode < 0) console.log("TCPCLient send error");
+			if (info.resultCode < 0){
+				console.log("TCPClient send error");
+				on_err();
+			}
 		})
 	}
 	setAddr(addr){
@@ -267,7 +287,7 @@ let tanks = [];
 class Tank{
 	static colors = ['red', 'green', 'blue', 'orange', 'purple'];
 	
-	constructor(addr="localhost", color=null){
+	constructor(addr="127.0.0.1", color=null){
 		this.data = {
 			move: {
 				com: { // command
@@ -299,26 +319,30 @@ class Tank{
 		};
 		
 		this.id = uniqueids[0]();
-		this.loops = {ids: {}, gamepad: {}, GET: {}, SET: {}};
+		this.loops = {ids: {}, coms:{}};
 		
 		this.addr = addr;
+		this.neterr = true;
 		
 		this.cam = { // in UDP stream
 			reader: new FileReader(),
 			img: null,
-			stream: UDPStream(addr, cam_port, data =>{
-				if (this.cam.reader.readyState != "LOADING") this.cam.reader.readAsDataURL(new Blob([data]));
+			on: true,
+			stream: new UDPStream(addr, cam_port, null, data =>{
+				if (this.cam.reader.readyState != 1 /*LOADING*/) this.cam.reader.readAsDataURL(new Blob([data]));
 			})
 		};
 		this.cam.reader.onloadend = () => this.cam.img.src = this.cam.reader.result;
 		
 		this.coms = {
 			move: { // in/out UDP stream
-				stream: UDPStream(addr, coms_port, this.getMoveData),
-				out_loop: new Loop(this.setMoveData, noop, ['out_move'], 1000/10) // 10 FPS
+				stream: new UDPStream(addr, coms_port_in, coms_port_out, this.getMoveData.bind(this)),
+				out_loop: null
 			},
 			opts: { // in/out TCP stream
-				stream: TCPClient(addr, coms_port, this.in_tcp_coms)
+				stream: new TCPClient(addr, opts_port, this.getOptsResp.bind(this)),
+				heartbeat_loop: null,
+				handlers: [] // handlers for tcp server responses, FIFO
 			}
 		};
 		
@@ -348,210 +372,99 @@ class Tank{
 	}
 	closeCamStream(){
 		this.cam.stream.close();
-		this.cam.img.style.display = 'none';
-	}
-	initComs(){
-		this.coms.move.stream.init();
-		this.coms.opts.stream.init();
-	}
-	closeComs(){
-		this.coms.move.out_loop.stop();
-		this.coms.move.stream.close();
-		this.coms.opts.stream.close();
+		if (this.cam.img != null) this.cam.img.style.display = 'none';
 	}
 	
-	getMoveData(data){
-		msg = String.fromCharCode.apply(null, data);
-		for (line in msg.split('\n')){
+	stopComsLoops(){
+		for (let key in this.loops.coms){
+			this.loops.coms[key].stop();
+			this.loops.coms[key].delFromPool(this.loops);
+		}
+	}
+	regenComsLoops(){
+		this.stopComsLoops();
+		this.coms.move.out_loop = new Loop(this.setMoveData.bind(this), noop, ['coms', 'out_move'], 1000/10).addToPool(this.loops); // 10 FPS
+		this.coms.opts.heartbeat_loop = new Loop(
+			this.sendOptsHeartbeat.bind(this), noop, ['coms', 'out_hbt'], 500, 1500, this.toggleNeterror.bind(this, true) // heartbeat every 1/2s, error if no answer after 1.5s
+		).addToPool(this.loops);
+	}
+	initComs(on_con){
+		this.regenComsLoops();
+		
+		this.coms.move.stream.init();
+		this.coms.opts.stream.init( ()=>{
+			this.coms.opts.heartbeat_loop.start();
+			on_con();
+		}, this.toggleNeterror.bind(this, true));
+	}
+	closeComs(){
+		this.stopComsLoops();
+		this.coms.move.stream.close();
+		this.coms.opts.stream.close();
+		this.coms.opts.handlers = [];
+	}
+	
+	toggleNeterror(on){
+		if (on){
+			this.closeCamStream()
+			this.closeComs()
+		}
+		getdom(`.span_unreachable[tankid="${this.id}"]`)[0].style.display = on ? 'inline' : 'none';
+		this.neterr = on;
+	}
+	
+	// parse received move / opts string data 
+	parseData(msg){
+		for (let line of msg.split('\n')){
+			if (line == "") continue;
+			
 			let [keys, vals] = line.split(';').map( el => el.split(',') );
 			
 			let obj = obj_get(this.data, keys.slice(0,-1));
 			let key = arr_last(keys);
 			
-			if (vals.length == 1) obj[key] = Number(vals[0]);
-			else                  obj[key] = vals.map( el => Number(el) );
+			if (vals.length == 1){
+				if (key == 'on') obj[key] = vals[0] == '1' ? true : false;
+				else             obj[key] = Number(vals[0]);
+			}
+			else                 obj[key] = vals.map( el => Number(el) );
 		}
 	}
-	in_tcp_coms(data){
-		
-	}
 	
-	toggleNeterror(on){
-		this.net.stop = on;
-		getdom(`.span_unreachable[tankid="${this.id}"]`)[0].style.display = on ? 'inline' : 'none';
-	}
-	stopLoop(loop){
-		loop.delFromPool(this.loops);
-		loop.stop();
-	}
-	stopLoops(types=[]){
-		if (types.length == 0) Object.values(this.loops.ids).forEach(loop => this.stopLoop(loop)); // stop all loops
-		else                   [...new Set(types.map(type => Object.values(this.loops[type])).flat())].forEach(loop => this.stopLoop(loop)); 
-	}
-	
-	setData(path, data, on_ok, on_errcode, on_errnet, on_netstop, loop=null){
-		if (this.net.stop){
-			on_netstop();
-			if (loop !== null) this.stopLoop(loop); 
-			return;
-		}
-		
-		fetch(`http://${this.net.addr}:${COM_PORT}${path}`, {method: 'PUT', body: data})
-		.then(res => {
-			if (res.ok){
-				on_ok();
-				if (loop !== null) loop.rec();
-			}
-			else{
-				if (loop !== null) this.stopLoop(loop);
-				on_errcode(res.status, res.statusText);
-				//this.toggleNeterror(true);
-			}
-		})
-		.catch(err => {
-			if (loop !== null) this.stopLoop(loop);
-			on_errnet(err);
-			this.toggleNeterror(true);
+	// receive opts response from tcp server, split into individual messages
+	getOptsResp(resp){
+		console.log("data");
+		String.fromCharCode.apply( null, new Uint8Array(resp) ).split('\n\n').forEach( msg => {
+			if (msg != '') this.coms.opts.handlers.shift()(msg);
 		});
 	}
-	setVec2dFromInput(parts, x, y, nodes){
-		let path = '/'+parts.join('/');
-		let obj = this[parts[0]][parts[1]][parts[2]];
-		this.setData(
-			path, `${x.toFixed(4)};${y.toFixed(4)}`, 
-			() => {
-				[obj[0], obj[1]] = [x, y];
-				this.dispmsg(`${path} set to (${x};${y})`);
-			}, 
-			(code, status) => {
-				setNodesVals(nodes, obj);
-				this.dispmsg(`error setting ${path} (${code} ${status})`);
-			},
-			err => {
-				setNodesVals(nodes, obj);
-				this.dispmsg(`error setting ${path} (${err})`);
-			},
-			() => setNodesVals(nodes, obj)
-		);
+	// send opts request to tcp server
+	sendOptsReq(req, callback=noop){
+		if (this.neterr) return;
+		this.coms.opts.stream.send( Uint8Array.from(req, el => el.charCodeAt()), this.toggleNeterror.bind(this, true) );
+		this.coms.opts.handlers.push(callback);
 	}
-	setVec2dFromLoop(parts, x, y, loop=null){ // loop is actually optional
-		let path = '/'+parts.join('/');
-		let obj = this[parts[0]][parts[1]][parts[2]];
-		this.setData(
-			path, `${x.toFixed(4)};${y.toFixed(4)}`, 
-			() => [obj[0], obj[1]] = [x, y], 
-			(code, status) => this.dispmsg(`error setting ${path} (${code} ${status})`),
-			err => this.dispmsg(`error setting ${path} (${err})`),
-			noop,
-			loop
-		);
-	}
-	setBool(parts, on, msg=false, node=null){
-		let path = '/'+parts.join('/');
-		let obj = this[parts[0]][parts[1]];
-		this.setData(
-			path + (on ? '/on' : '/off'), '',
-			() => {
-				obj.on = on;
-				if (msg) this.dispmsg(`${path} set to ${on ? 'enabled' : 'disabled'}`);
-				if (node != null) update_radiozone(node);
-			}, 
-			(code, status) => {
-				if (node !== null) revert_radiozone(node);
-				this.dispmsg(`error setting ${path} (${code} ${status})`);
-			},
-			err => {
-				if (node !== null) revert_radiozone(node);
-				this.dispmsg(`error setting ${path} (${err})`);
-			},
-			() => { if (node !== null) revert_radiozone(node); }
-		);
-	}
-	
-	getData(path, on_ok, on_errcode, on_errnet, on_netstop, loop=null){
-		if (this.net.stop){
-			on_netstop();
-			if (loop !== null) this.stopLoop(loop); 
-			return;
-		}
+	sendOptsSET(parts, val){ // send GET request
+		let type = typeof val;
+		     if (type == 'boolean') this.sendOptsReq(`SET\n${parts.join(',')};${val ? '1' : '0'}\n\n`);
+		else if (type == 'number')  this.sendOptsReq(`SET\n${parts.join(',')};${val}\n\n`);
+		else /* array */            this.sendOptsReq(`SET\n${parts.join(',')};${val.join(',')}\n\n`);
 		
-		fetch(`http://${this.net.addr}:${COM_PORT}${path}`, {method: 'GET'})
-		.then(res => {
-			if (res.ok) res.text().then(txt => {
-					on_ok(txt);
-					if (loop !== null) loop.rec();
-				}).catch(err => {
-					if (loop !== null) this.stopLoop(loop);
-					on_errnet(err); 
-					this.toggleNeterror(true);
-				});
-			else{
-				if (loop !== null) this.stopLoop(loop);
-				on_errcode(res.status, res.statusText);
-				this.toggleNeterror(true);
-			}
-		})
-		.catch(err => {
-			if (loop !== null) this.stopLoop(loop);
-			on_errnet(err);
-			this.toggleNeterror(true);
-		});
+		obj_set(this.data, parts, val);
+		this.dispmsg(`"${parts}" set to "${val}"`);
 	}
-	getVec2d(parts, msg=false, loop=null){
-		let path = '/'+parts.join('/');
-		this.getData(
-			path, 
-			txt => {
-				try{
-					let [x,y] = txt.split(";");
-					let obj = this[parts[0]][parts[1]][parts[2]];
-					[obj[0], obj[1]] = [Number(x), Number(y)]; 
-					if (msg) this.dispmsg(`${path} is (${x};${y})`); 
-				}
-				catch (err){ this.dispmsg(`error getting ${path} (${err})`); }
-			}, 
-			(code, status) => this.dispmsg(`error getting ${path} (${code} ${status})`),
-			err            => this.dispmsg(`error getting ${path} (${err})`),
-			noop,
-			loop
-		);
+	sendOptsGET(parts){ // send SET request
+		this.sendOptsReq(`GET\n${parts.join(',')}\n\n`, this.parseData);
 	}
-	getBool(parts, msg=false){
-		let path = '/'+parts.join('/');
-		this.getData(
-			path+'/on', 
-			txt => {
-				if (txt == '1'){ 
-					this[parts[0]][parts[1]].on = true;   
-					if (msg) this.dispmsg(`${path} is on`); 
-				}
-				else if (txt == '0'){ 
-					this[parts[0]][parts[1]].on = false;   
-					if (msg) this.dispmsg(`${path} is off`); 
-				}
-				else this.dispmsg(`error getting ${path}`);
-			}, 
-			(code, status) => this.dispmsg(`error getting ${path} (${code} ${status})`),
-			err            => this.dispmsg(`error getting ${path} (${err})`),
-			noop
-		);
+	sendOptsHeartbeat(rec){
+		console.log("htbt");
+		this.sendOptsReq('HEARTBEAT\n\n', rec); // the response msg contents will be ignored, only the fact that a response was sent back is important
 	}
 	
-	// sends new request once the answer to the previous one arrives
-	// HTTP1.1 connections are "keep alive" by default so this should be fine in terms of latency 
-	getLoop(fun, delay=500){ new Loop(fun, noop, ['GET'], delay).addToPool(this.loops).rec(); }
-	getPosLoop(){ this.getLoop( loop => this.getVec2d(['move', 'real', 'pos'], false, loop) ) }
-	getDirLoop(){ this.getLoop( loop => this.getVec2d(['move', 'real', 'dir'], false, loop) ) }
-	
-	getGamepadData(){
-		this.gamepad.obj = navigator.getGamepads()[this.gamepad.ind];
-		
-		this.data.move.com.vel = velconvert([this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]]);
-		// other buttons
-		// ...
+	// send udp stream of move data (from gamepad or other source) as part of loop
+	getMoveData(data){
+		this.parseData( String.fromCharCode.apply(null, new Uint8Array(data)) );
 	}
-	
-	// send udp stream of move data (from gamepad or other source)
 	setMoveData(rec){
 		if (this.gamepad.on || this.gamepad.obj !== null) this.getGamepadData();
 		// other sources
@@ -559,55 +472,75 @@ class Tank{
 		
 		// prepare data
 		msg = ''
-		for (key1 in this.data){
+		for (let key1 in this.data){
 			let part = this.data[key1].com;
-			for (key2 in part){
+			for (let key2 in part){
 				obj = part[key2];
 				
 				if (typeof obj == 'number') res += `${key1},com,${key2};${obj}\n`;
 				else                        res += `${key1},com,${key2};${obj.join(',')}\n`;
 			}
 		}
-		this.coms.move.stream.send( Uint8Array.from(msg, el => el.charCodeAt()), rec );
+		this.coms.move.stream.send( Uint8Array.from(msg, el => el.charCodeAt()), rec, this.toggleNeterror.bind(this, true) );
 	}
 	
 	refresh(){
 		this.toggleNeterror(false);
-		this.dispmsg('refreshing connection...');
+		this.dispmsg('Refreshing connection...');
 		
-		// stop all loops
-		this.stopLoops(['GET', 'SET']);
-		// set values
-		getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).forEach(el => el.click());
-		getdom(`.div_tank[tankid="${this.id}"] .div_radiozone input[checked]`).forEach(el => el.click());
-		// get values
-		this.getBool( ['move', 'auto'] );
-		this.getBool( ['cannon', 'auto'] );
-		this.getPosLoop();
-		this.getDirLoop();
+		this.closeCamStream();
+		this.closeComs();
+		this.cam.stream.setAddr(this.addr);
+		this.coms.move.stream.setAddr(this.addr);
+		this.coms.opts.stream.setAddr(this.addr);
+		
+		if (this.cam.on) this.initCamStream();
+		this.initComs(()=>{
+			// set values
+			getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).slice(1).forEach(el => el.click()); // all buttons except first [!] should be tank addr input [!]
+			getdom(`.div_tank[tankid="${this.id}"] .div_radiozone input[checked]`).forEach(el => el.click());
+		});
+		
+	}
+	setAddr(addr){
+		this.addr = addr;
+		this.refresh();
 	}
 	
+	// return = [left wheel speed, right wheel speed]
+	gamepadStickToVel(vel){
+		vel[0] *= 0.3;
+		vel[1] *= 0.3;
+		
+		const DEADZONE = 0.2;
+		let dist = (vel[0]**2 + vel[1]**2)**0.5;
+		if (dist < DEADZONE) return [0,0];
+		
+		let angle = Math.atan2(vel[1], vel[0]);	
+		if (angle >= -Math.PI/2 && angle <= Math.PI/2) return [dist, vel[1]]; // right half
+		else                                           return [vel[1], dist]; // left half
+	}
+	getGamepadData(){
+		this.gamepad.obj = navigator.getGamepads()[this.gamepad.ind];
+		
+		this.data.move.com.vel = this.gamepadStickToVel([this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]]);
+		// other buttons
+		// ...
+	}
 	toggleGamepad(on){
 		this.gamepad.on = on;
-		if (on && this.gamepad.obj !== null){ // start gamepad loops
-			this.stopLoops(['gamepad']);
-			this.gamepadUpdateLoop();
-		}
-		else if (!on) this.setVec2dFromLoop(['move', 'com', 'vel'], 0, 0); // stop motors
 	}
 	connectGamepad(gamepad){
 		this.gamepad.obj = gamepad;
-		if (this.gamepad.on) this.toggleGamepad(true);
 	}
 	disconnectGamepad(){
 		this.gamepad.obj = null;
-		this.setVec2dFromLoop(['move', 'com', 'vel'], 0, 0); // stop motors
 	}
 	
 	draw(){
 		// draw target flag
 		ctx.save();
-		ctx.translate(...this.move.auto.target);
+		ctx.translate(...this.data.move.auto.target);
 		ctx.scale(1,-1);
 		let imgw = this.pickerImg.width*mPERpx; 
 		let imgh = this.pickerImg.height*mPERpx; 
@@ -616,14 +549,14 @@ class Tank{
 		// draw tank
 		ctx.save();
 		ctx.fillStyle = this.color;
-		ctx.translate(this.move.real.pos[0], this.move.real.pos[1]);
-		ctx.rotate(-Math.atan2(this.move.real.dir[1], this.move.real.dir[0]));
+		ctx.translate(this.data.move.real.pos[0], this.data.move.real.pos[1]);
+		ctx.rotate(-Math.atan2(this.data.move.real.dir[1], this.data.move.real.dir[0]));
 		ctx.fill(this.path);
 		ctx.restore();
 	}
 	
 	dispmsg(msg){
-		msgconsole.innerHTML += `<br>TANK&lt;${this.net.tcp.addr}&gt; <b>::</b> ${msg}`;
+		msgconsole.innerHTML += `<br>TANK&lt;${this.id}&gt; <b>::</b> ${msg}`;
 	}
 }
 function addTank(){
@@ -632,19 +565,21 @@ function addTank(){
 	
 	let tankidattr = `tankid="${tank.id}"`;
 	
-	getdom('#div_tanks')[0].innerHTML += `
+	// using "innerHTML +=" would destroy the previous event listeners 
+	getdom('#div_tanks')[0].insertAdjacentHTML('beforeend', `
 		<div class="div_tank" ${tankidattr}>
 			<div>
-				<span style="color:${tank.color};"><b>Tank</b></span> ${html_inputzone("in_tankaddr", 1, [tank.net.addr], [tankidattr+" size=6"])} <span class="span_unreachable" ${tankidattr}>unreachable</span>
+				<span style="color:${tank.color};"><b>Tank</b></span> n°${tank.id} ${html_inputzone(1, 'input_tankaddr', [tank.addr], [tankidattr+" size=6"])} 
+				<span class="span_unreachable" ${tankidattr} style="display:${tank.neterr ? 'inline' : 'none'};">unreachable</span>
 				<input type="image" src="res/sync.png" class="btn_refresh btn"></input>
 			</div><br>
 			<details>
 				<summary>Movement</summary>
-				Mode: ${html_radiozone("radio_movemode", ["manual", "auto"], tank.move.auto.on ? 1 : 0, tankidattr)}
+				Mode: ${html_radiozone("radio_movemode", ["manual", "auto"], tank.data.move.auto.on ? 1 : 0, tankidattr)}
 				<div>
 					Target pos.: ${html_inputzone(
 						2, 'input_targetpos',
-						[tank.move.com.pos[0].toFixed(1), tank.move.com.pos[0].toFixed(1)],
+						[tank.data.move.com.pos[0].toFixed(1), tank.data.move.com.pos[0].toFixed(1)],
 						[tankidattr+' size=2', tankidattr+' size=2']
 					)}<!--
 					--><input type="image" src="res/click.png" class="btn_picktargetpos btn" ${tankidattr} style="animation:none;"></input>
@@ -652,7 +587,7 @@ function addTank(){
 			</details>
 			<details>
 				<summary>Cannon</summary>
-				Mode: ${html_radiozone("radio_cannonmode", ["manual", "auto"], tank.cannon.auto.on ? 1 : 0, tankidattr)}
+				Mode: ${html_radiozone("radio_cannonmode", ["manual", "auto"], tank.data.cannon.auto.on ? 1 : 0, tankidattr)}
 			</details><br>
 			<div>
 				<input type="checkbox" class="check_gamepad" ${tank.gamepad.on ? "checked" : ""} ${tankidattr}>
@@ -663,51 +598,73 @@ function addTank(){
 				)}
 			</div>
 			<div>
-				<input type="checkbox" class="check_camera" checked></input>Camera feed:
+				<input type="checkbox" class="check_camera" ${tank.cam.on ? "checked" : ""}></input>Camera feed:
 				<img width=200 style="-webkit-user-select:none;display:block;" ${tankidattr}>
 			</div>
 		</div>
-	`;
-		
+	`);
+	
 	let tankdiv = getdom(`div[${tankidattr}]`)[0];
+	
 	// html_inputzone callbacks
-	getdom('.in_inputzone', tankdiv)[0].addEventListener( 'input', function(){getdom('div', this.parentNode)[0].style.display = 'inline';} );
-	set_inputzonebtns_callbacks(in_targetpos, 2, tankdiv, '.input_targetpos');
-	set_inputzonebtns_callbacks(in_gamepadind, 1, tankdiv, '.input_gamepadind');
+	set_inputzone_callback(tankdiv);
+	set_inputzonebtns_callbacks(nodes => tank.setAddr(nodes[0].value), 1, tankdiv, '.input_tankaddr');
+	set_inputzonebtns_callbacks(
+		nodes => tank.sendOptsSET(['move', 'auto', 'target'], [Number(nodes[0].value), Number(nodes[1].value)])
+	, 2, tankdiv, '.input_targetpos');
+	set_inputzonebtns_callbacks(nodes =>{
+		try{
+			let gamepad = navigator.getGamepads()[Number(nodes[0].value)];
+			if (gamepad === null) throw new Error();
+			tank.connectGamepad(gamepad);
+		}
+		catch{
+			tank.disconnectGamepad();
+			dispmsgGamepad(nodes[0].value, 'not connected');
+		}
+	}, 1, tankdiv, '.input_gamepadind');
+	
 	// html_radiozone callbacks
-	set_radiozone_callbacks(toggle_mode_move, tankdiv, 'radio_movemode');
-	set_radiozone_callbacks(toggle_mode_cannon, tankdiv, 'radio_cannonmode');
+	set_radiozone_callbacks(
+		(nodezone, value) => tank.sendOptsSET(['move', 'auto', 'on'], value == 'auto')
+	, tankdiv, 'radio_movemode');
+	set_radiozone_callbacks(
+		(nodezone, value) => tank.sendOptsSET(['cannon', 'auto', 'on'], value == 'auto')
+	, tankdiv, 'radio_cannonmode');
+	
 	// other callbacks
-	getdom('.btn_refresh', tankdiv)[0].addEventListener( 'click', ()=>tankfromid(tank.id).refresh() );
-	getdom('.btn_picktargetpos', tankdiv)[0].addEventListener( 'click', function(){pick_targetpos(this);} );
-	getdom('.check_gamepad', tankdiv)[0].addEventListener( 'change', function(){toggle_gamepad(this);} );
-	getdom('.check_camera', tankdiv)[0].addEventListener( 'change', function(){toggle_camerafeed(this);} );
+	getdom('.btn_refresh', tankdiv)[0].addEventListener('click', ()=>tank.refresh() );
+	getdom('.btn_picktargetpos', tankdiv)[0].addEventListener('click', function(){
+		if (pospicker_tank == tank) unlatch_targetpospicker();
+		else                        latch_targetpospicker(tank, this);
+	});
+	getdom('.check_gamepad', tankdiv)[0].addEventListener('change', function(){ tank.toggleGamepad(this.checked); });
+	getdom('.check_camera', tankdiv)[0].addEventListener('change', function(){
+		tank.cam.on = this.checked;
+		if (this.checked) tank.initCamStream();
+		else              tank.closeCamStream();
+	});
 }
-let tankfromid = id => tanks.find(tank => tank.id == id)
-let tankfromnode = node => tankfromid( Number(node.getAttribute('tankid')) );
 
-function in_tankaddr(nodes){ tankfromnode(nodes[0]).setAddr(nodes[0].value); }
-function in_targetpos(nodes){ tankfromnode(nodes[0]).setVec2dFromInput(['move', 'auto', 'target'], Number(nodes[0].value), Number(nodes[1].value), nodes); }
-function pick_targetpos(node){
-	if (pospicker_tank == tankfromnode(node)) unlatch_targetpospicker();
-	else latch_targetpospicker(node);
+let pospicker_tank = null;
+function latch_targetpospicker(tank, node){
+	canvas.style.cursor = `url('${tank.pickerUrl}') 0 24,auto`;
+	getdom('.btn_picktargetpos').forEach(el => {
+		el.style.animation = 'none';
+		el.style.boxShadow = null;
+	});
+	node.style.animation = null;
+	node.style.boxShadow = 'none';
+	pospicker_tank = tank;
 }
-function toggle_mode_move(nodezone, value)  { tankfromnode(nodezone).setBool(['move', 'auto']  , value == 'auto', true, nodezone); }
-function toggle_mode_cannon(nodezone, value){ tankfromnode(nodezone).setBool(['cannon', 'auto'], value == 'auto', true, nodezone); }
-function toggle_gamepad(node){ tankfromnode(node).toggleGamepad(node.checked); }
-function in_gamepadind(nodes){
-	try{
-		let gamepad = navigator.getGamepads()[Number(nodes[0].value)];
-		if (gamepad === null) throw new Error();
-		tankfromnode(nodes[0]).connectGamepad(gamepad);
-	}
-	catch{
-		tankfromnode(nodes[0]).disconnectGamepad();
-		dispmsgGamepad(nodes[0].value, 'not connected');
-	}
+function unlatch_targetpospicker(){
+	canvas.style.cursor = 'auto';
+	getdom('.btn_picktargetpos').forEach(el => {
+		el.style.animation = 'none';
+		el.style.boxShadow = null;
+	});
+	pospicker_tank = null;
 }
-function toggle_camerafeed(node){ getdom('img', node.parentNode)[0].style.display = node.checked ? 'block' : 'none'; }
-
 
 let fps = 20;
 window.setInterval(() => {
@@ -754,6 +711,7 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
+	. add enable loop for move data 
 	. add input to select speed factor for manual / auto control
 	. add separate overlay canvas
 	. canvas add axes

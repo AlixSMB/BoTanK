@@ -23,7 +23,6 @@ body{
 
 .span_unreachable{
 	color: red;
-	display: none;
 	font-style: italic;
 	margin-left: 15px;
 	margin-right: 15px;
