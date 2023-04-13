@@ -1,15 +1,20 @@
 # BoTanK
 Projet tank intelligent
 
-## Interface de commande
-- Web app locale
-- Serveur HTTP/1.1 sur le tank
-- Communication bi-directionnelle via API REST (GET/PUT)
-- Stream {tank -> interface de commande} de caméra / position / direction / vitesse
+## Interface de contrôle
+- Chrome app
+- Reception flux vidéo en provenance de tank (UDP)
+- Emission flux de données commande mouvement vers tank (UDP)
+- Communication requête <-> réponse avec tank (TCP) 
+
+## Tank
+- Scripts python
+- Emission flux video vers interface de contrôle (UDP)
+- Emission flux de données mouvement vers interface de contrôle (UDP)
+- Communication requête <-> réponse avec interface de contrôle (TCP) 
 
 ## Contrôle manuel
-- Utilisation de Gamepad connecté à l'ordi (manette Xbox360)
-- Zone joystick divisée en parties correspondant à des mouvements de tank prédéfinis 
+- Utilisation de Gamepad connecté à l'ordi (manette Xbox360) 
 
 ## Déplacement autonome
-- Utilisation de grille Charuco
+- Utilisation de marqueurs Aruco
