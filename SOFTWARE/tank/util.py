@@ -32,6 +32,35 @@ def timers_start():
 def timers_end():
 	for timer in timers : timers[timer][2] = False
 
+class Timeout:
+	def __init__(self, maxelapsed, callback):
+		self.maxelapsed = maxelapsed
+		self.callback = callback
+		self.last = time.perf_counter()
+		self.stopped = False
+		self.enabled = False
+	
+	def refresh(self):
+		if not self.enabled : return
+		
+		self.stopped = False
+		self.last = time.perf_counter()
+	def check(self):
+		if self.stopped or not self.enabled : return
+		
+		if time.perf_counter() - self.last > self.maxelapsed :
+			self.stopped = True
+			self.callback()
+	
+	def disable(self):
+		self.enabled = False
+		return self
+	def enable(self):
+		if self.enabled : return self # don't re-enable if already enabled
+		
+		self.enabled = True
+		self.refresh()
+		return self
 
 # from https://stackoverflow.com/questions/43665208/how-to-get-the-latest-frame-from-capture-device-camera-in-opencv
 # read always the latest frame

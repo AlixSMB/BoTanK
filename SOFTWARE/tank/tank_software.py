@@ -40,7 +40,7 @@ print(f"Video res.: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FR
 print(f"Video FPS: {cap.get(cv2.CAP_PROP_FPS)}")
 #print(f"Video exposure: {cap.get(cv2.CAP_PROP_EXPOSURE)}")
 
-ADDR_CTRLPANEL = "127.0.0.1"#"10.7.252.35"
+ADDR_CTRLPANEL = "127.0.0.1"#"10.7.252.45"
 print(f"Control panel IP set to {ADDR_CTRLPANEL}")
 PORT_CAM = 81
 PORT_OPTS = 82
@@ -125,15 +125,19 @@ def send_move_data(server):
 				if isinstance(obj.val, list) : msg += f"{key1},real,{key2};{ ','.join([str(el) for el in obj.val]) }\n"
 				else                         : msg += f"{key1},real,{key2};{str(obj.val)}\n"
 	server.send(msg.encode('ascii'))
-	
+
 # update data from coms channel (remote)
 def update_data(self, val):
 	self.val = val
-def update_move_vel(self, vel):
+def update_move_vel(self, vel, fromprog=False):
 	if not data['move']['auto']['on'].val:
 		set_move_vel(vel)
 		self.val = vel
+		if not fromprog : timeouts['check_movedata'].refresh()
 def toggle_move_auto(self, on):
+	if on : timeouts['check_movedata'].disable()
+	else  : timeouts['check_movedata'].enable()
+	
 	kit.motor1.throttle = 0
 	kit.motor2.throttle = 0
 	self.val = on
@@ -175,6 +179,11 @@ data = {
 		'auto': {'on': Object(val=False, onchange=toggle_canon_auto),}
 	}	
 };
+
+timeouts = {
+	'check_movedata': Timeout(1, partial(data['move']['com']['vel'].onchange, [0,0], True)) # set vel to 0 if we don't receive move data for extended amount of time and move is set to manual
+}
+if not data['move']['auto']['on'] : timeouts['check_movedata'].enable()
 
 def auto_move():
 	target = data['move']['auto']['target'].val
@@ -226,6 +235,7 @@ while True:
 	# handle received move message
 	msg = net.inout_move.recv()
 	if msg != None : recv_move_data(msg)
+	print(data['move']['com']['vel'].val)
 	# handle received opts message
 	msg = net.server_opts.recv()
 	if msg != None : recv_opts_data(net.server_opts, msg)
@@ -237,6 +247,7 @@ while True:
 	
 	#if cv2.waitKey(1) == ord('q') : break
 	timers_end()
+	for key in timeouts : timeouts[key].check()
 
 
 # TODO:
