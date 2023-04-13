@@ -262,12 +262,13 @@ class TCPClient{
 			});
 		});
 	}
-	send(data, on_err){
+	send(data, callback, on_err){
 		chrome.sockets.tcp.send(this.sockid, data, info => {
 			if (info.resultCode < 0){
 				console.log("TCPClient send error");
 				on_err();
 			}
+			else callback();
 		})
 	}
 	setAddr(addr){
@@ -365,6 +366,12 @@ class Tank{
 		this.pickerImg.src = this.pickerUrl;
 	}
 	
+	stopLoop(loop){
+		if (loop == null) return;
+		loop.stop();
+		loop.delFromPool(this.loops);
+	}
+	
 	initCamStream(){
 		this.cam.img = getdom(`img[tankid="${this.id}"]`)[0];
 		this.cam.stream.init({bufferSize:4096*10}); // [!] If the recv buffer is too small, the packets are silently dropped [!]
@@ -376,17 +383,21 @@ class Tank{
 	}
 	
 	stopComsLoops(){
-		for (let key in this.loops.coms){
-			this.loops.coms[key].stop();
-			this.loops.coms[key].delFromPool(this.loops);
-		}
+		for (let key in this.loops.coms) this.stopLoop(this.loops.coms[key]);
 	}
-	regenComsLoops(){
-		this.stopComsLoops();
+	regenMoveDataLoop(){
+		this.stopLoop(this.coms.move.out_loop);
 		this.coms.move.out_loop = new Loop(this.setMoveData.bind(this), noop, ['coms', 'out_move'], 1000/10).addToPool(this.loops); // 10 FPS
+	}
+	regenHeartbeatLoop(){
+		this.stopLoop(this.coms.opts.heartbeat_loop);
 		this.coms.opts.heartbeat_loop = new Loop(
 			this.sendOptsHeartbeat.bind(this), noop, ['coms', 'out_hbt'], 500, 1500, this.toggleNeterror.bind(this, true) // heartbeat every 1/2s, error if no answer after 1.5s
 		).addToPool(this.loops);
+	}
+	regenComsLoops(){
+		this.regenMoveDataLoop();
+		this.regenHeartbeatLoop();
 	}
 	initComs(on_con){
 		this.regenComsLoops();
@@ -430,10 +441,13 @@ class Tank{
 			else                 obj[key] = vals.map( el => Number(el) );
 		}
 	}
+	// send move / opts string data, handle errors
+	sendData(msg, socket, callback=noop){
+		socket.send( Uint8Array.from(msg, el => el.charCodeAt()), callback, this.toggleNeterror.bind(this, true) );
+	}
 	
 	// receive opts response from tcp server, split into individual messages
 	getOptsResp(resp){
-		console.log("data");
 		String.fromCharCode.apply( null, new Uint8Array(resp) ).split('\n\n').forEach( msg => {
 			if (msg != '') this.coms.opts.handlers.shift()(msg);
 		});
@@ -441,7 +455,7 @@ class Tank{
 	// send opts request to tcp server
 	sendOptsReq(req, callback=noop){
 		if (this.neterr) return;
-		this.coms.opts.stream.send( Uint8Array.from(req, el => el.charCodeAt()), this.toggleNeterror.bind(this, true) );
+		this.sendData(req, this.coms.opts.stream);
 		this.coms.opts.handlers.push(callback);
 	}
 	sendOptsSET(parts, val){ // send GET request
@@ -457,7 +471,6 @@ class Tank{
 		this.sendOptsReq(`GET\n${parts.join(',')}\n\n`, this.parseData);
 	}
 	sendOptsHeartbeat(rec){
-		console.log("htbt");
 		this.sendOptsReq('HEARTBEAT\n\n', rec); // the response msg contents will be ignored, only the fact that a response was sent back is important
 	}
 	
@@ -466,22 +479,32 @@ class Tank{
 		this.parseData( String.fromCharCode.apply(null, new Uint8Array(data)) );
 	}
 	setMoveData(rec){
-		if (this.gamepad.on || this.gamepad.obj !== null) this.getGamepadData();
+		this.updateGamepadData();
 		// other sources
 		// ...
 		
 		// prepare data
-		msg = ''
+		let msg = '';
 		for (let key1 in this.data){
 			let part = this.data[key1].com;
 			for (let key2 in part){
-				obj = part[key2];
+				let obj = part[key2];
 				
-				if (typeof obj == 'number') res += `${key1},com,${key2};${obj}\n`;
-				else                        res += `${key1},com,${key2};${obj.join(',')}\n`;
+				if (typeof obj == 'number') msg += `${key1},com,${key2};${obj}\n`;
+				else                        msg += `${key1},com,${key2};${obj.join(',')}\n`;
 			}
 		}
-		this.coms.move.stream.send( Uint8Array.from(msg, el => el.charCodeAt()), rec, this.toggleNeterror.bind(this, true) );
+		this.sendData(msg, this.coms.move.stream, rec);
+	}
+	setVel0(){
+		this.data.move.com.vel = [0,0];
+		this.sendData('move,com,vel;0,0\n', this.coms.move.stream);
+	}
+	toggleMoveAuto(on){
+		this.regenMoveDataLoop();
+		if (!on) this.coms.move.out_loop.start(); // auto is off, manual is on
+		
+		this.sendOptsSET(['move', 'auto', 'on'], on);
 	}
 	
 	refresh(){
@@ -520,7 +543,8 @@ class Tank{
 		if (angle >= -Math.PI/2 && angle <= Math.PI/2) return [dist, vel[1]]; // right half
 		else                                           return [vel[1], dist]; // left half
 	}
-	getGamepadData(){
+	updateGamepadData(){
+		if (!this.gamepad.on || this.gamepad.obj == null) return; 
 		this.gamepad.obj = navigator.getGamepads()[this.gamepad.ind];
 		
 		this.data.move.com.vel = this.gamepadStickToVel([this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]]);
@@ -528,12 +552,14 @@ class Tank{
 		// ...
 	}
 	toggleGamepad(on){
+		if (this.gamepad.on && !on) this.setVel0(); // from enabled to disabled
 		this.gamepad.on = on;
 	}
 	connectGamepad(gamepad){
 		this.gamepad.obj = gamepad;
 	}
 	disconnectGamepad(){
+		if (this.gamepad.on) this.setVel0();
 		this.gamepad.obj = null;
 	}
 	
@@ -626,7 +652,7 @@ function addTank(){
 	
 	// html_radiozone callbacks
 	set_radiozone_callbacks(
-		(nodezone, value) => tank.sendOptsSET(['move', 'auto', 'on'], value == 'auto')
+		(nodezone, value) => tank.toggleMoveAuto(value == 'auto')
 	, tankdiv, 'radio_movemode');
 	set_radiozone_callbacks(
 		(nodezone, value) => tank.sendOptsSET(['cannon', 'auto', 'on'], value == 'auto')
@@ -711,7 +737,6 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
-	. add enable loop for move data 
 	. add input to select speed factor for manual / auto control
 	. add separate overlay canvas
 	. canvas add axes
