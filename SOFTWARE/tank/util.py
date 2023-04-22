@@ -2,6 +2,7 @@ import socket
 import errno
 import time
 import cv2
+import numpy as np
 import threading
 
 
@@ -62,8 +63,51 @@ class Timeout:
 		self.refresh()
 		return self
 
+# nb_w / nb_h is total number of cells (black or white) in row/column
+def getChessBoardCorners(nb_w, nb_h, cell_s):
+	# bottom right corners of black and white cells, starts at top left cell, goes right then down
+	return [ [cell_s*i, cell_s*j, 0] for j in range(1,nb_h) for i in range(1,nb_w) ]
+# returns ids , 4 corners of each marker
+def getGridMarkers(nb_w, nb_h, cell_s, cell_m):
+	ids = []
+	corners = []
+	
+	s = cell_s + cell_m*2 # total square size
+	n=0
+	for i in range(nb_w):
+		for j in range(nb_h):
+			
+			ids.append(n) # ids
+			n += 1
+			
+			yt = s*j + cell_m        ; yb = s*j + cell_m+cell_s
+			xr = s*i + cell_m+cell_s ; xl = s*i + cell_m
+			corners.append([ [xl,yt,0], [xl,yb,0], [xr,yb,0], [xr,yt,0] ]) # top left corner first, CCW order
+	
+	return [ np.asarray(ids, int), np.asarray(corners, np.float32) ]
+
+# from: https://medium.com/@kennethjiang/calibrate-fisheye-lens-using-opencv-part-2-13990f1b157f
+def fisheye_undistort(cam_params, img, balance=1.0, dim2=None, dim3=None):
+	DIM = cam_params['dims']
+	D = cam_params['D']
+	K = cam_params['K']
+	
+	dim1 = img.shape[:2][::-1]  # dim1 is the dimension of input image to un-distort
+	assert dim1[0]/dim1[1] == DIM[0]/DIM[1], "Image to undistort needs to have same aspect ratio as the ones used in calibration"
+	
+	if not dim2 : dim2 = dim1
+	if not dim3 : dim3 = dim1
+	scaled_K = K * dim1[0] / DIM[0]  # The values of K is to scale with image dimension.
+	scaled_K[2][2] = 1.0  # Except that K[2][2] is always 1.0
+	# This is how scaled_K, dim2 and balance are used to determine the final K used to un-distort image. OpenCV document failed to make this clear!
+	new_K = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(scaled_K, D, dim2, np.eye(3), balance=balance)
+	map1, map2 = cv2.fisheye.initUndistortRectifyMap(scaled_K, D, np.eye(3), new_K, dim3, cv2.CV_16SC2)
+	
+	return cv2.remap(img, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+
 # from https://stackoverflow.com/questions/43665208/how-to-get-the-latest-frame-from-capture-device-camera-in-opencv
 # read always the latest frame
+'''
 class VideoCapture:
 	def __init__(self, *args):
 		self.cap = cv2.VideoCapture(*args)
@@ -88,9 +132,9 @@ class VideoCapture:
 		with self.lock:
 			ret, frame = self.cap.retrieve()
 		return ret, frame
+'''
 
 # Connections with only 1 other device
-i=0
 class UDP:
 	def __init__(self, addr, port_in=None, port_out=None):
 		self.addr = addr

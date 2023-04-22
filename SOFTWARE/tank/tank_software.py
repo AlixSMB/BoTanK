@@ -10,6 +10,12 @@ import numpy as np
 kit = Object(motor1=Object(throttle=0), motor2=Object(throttle=0))
 import math
 import time
+import pickle
+
+# load camera data
+CAMERADATA_FILENAME = "jetbot_fisheye_params_1"
+print(f"Reading camera calibration params from \"{CAMERADATA_FILENAME}\"")
+with open(CAMERADATA_FILENAME, "rb") as filecamera : cameradata = pickle.load(filecamera)
 
 # receive camera feed
 camW = 1280
@@ -25,27 +31,27 @@ GST_STRING = \
 	'video/x-raw, width=(int){width}, height=(int){height}, format=(string)BGRx ! '\
 	'videoconvert ! '\
 	'video/x-raw, format=(string)BGR ! '\
-	'appsink'.format(
+	'appsink drop=true'.format(
 			width=camW,
 			height=camH,
 			fps=60,
 			capture_width=camW,
 			capture_height=camH
 	)
-#cap = cv2.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) #VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) # from util.py [!]
-cap = cv2.VideoCapture(0) #VideoCapture(0)
+cap = cv2.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) #VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) # from util.py [!]
+#cap = cv2.VideoCapture(0) #VideoCapture(0)
 
 #cap.set(cv2.CAP_PROP_EXPOSURE, -5) # set to 0.25 auto-adjust
 print(f"Video res.: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
 print(f"Video FPS: {cap.get(cv2.CAP_PROP_FPS)}")
 #print(f"Video exposure: {cap.get(cv2.CAP_PROP_EXPOSURE)}")
 
-ADDR_CTRLPANEL = "127.0.0.1"#"10.7.252.45"
+ADDR_CTRLPANEL = "192.168.43.75"
 print(f"Control panel IP set to {ADDR_CTRLPANEL}")
-PORT_CAM = 81
-PORT_OPTS = 82
-PORT_COMS_IN = 82
-PORT_COMS_OUT = 83
+PORT_CAM = 8081
+PORT_OPTS = 8082
+PORT_COMS_IN = 8082
+PORT_COMS_OUT = 8083
 net = Object(
 	out_cam = UDP(ADDR_CTRLPANEL, None, PORT_CAM),
 	inout_move = UDP(ADDR_CTRLPANEL, PORT_COMS_IN, PORT_COMS_OUT),
@@ -122,7 +128,7 @@ def send_move_data(server):
 			
 			if key2 == 'on' : msg += f"{key1},real,{key2};{'1' if obj.val else '0'}\n"
 			else:
-				if isinstance(obj.val, list) : msg += f"{key1},real,{key2};{ ','.join([str(el) for el in obj.val]) }\n"
+				if isinstance(obj.val, (list, np.ndarray)) : msg += f"{key1},real,{key2};{ ','.join([str(el) for el in obj.val]) }\n"
 				else                         : msg += f"{key1},real,{key2};{str(obj.val)}\n"
 	server.send(msg.encode('ascii'))
 
@@ -204,17 +210,18 @@ def auto_move():
 	else                                          : set_move_vel([vel[1]*speed, dist*speed])
 
 set_timer('stream_imgframe', 1/20) # 20 fps
-set_timer('stream_movedata', 1/10) # 10 fps
+set_timer('movedata', 1/10) # 10 fps
 while True:
 	timers_start()
 	
 	# read new camera frame
-	ret, camera_frame = cap.read()
-	if not ret: 
-		print("Camera error, quitting...")
-		cap.release()
-		break
-	#cv2.imshow('videostream', camera_frame)
+	if check_timer('movedata'):	
+		ret, camera_frame = cap.read()
+		if not ret: 
+			print("Camera error, quitting...")
+			cap.release()
+			break
+		camera_frame = util.fisheye_undistort(cameradata, camera_frame)
 	
 	# stream camera
 	if check_timer('stream_imgframe'):
@@ -222,11 +229,10 @@ while True:
 		net.out_cam.send(camera_jpegbytes)
 	
 	# compute tank pos, speed
-	transfo = getBoardTransform(camera_frame)
+	transfo = getBoardTransform(cameradata, camera_frame)
 	if transfo is not None:
 		data['move']['real']['pos'].val = transfo[0]
 		data['move']['real']['dir'].val = transfo[1]
-		
 		if data['move']['auto']['on'].val : auto_move()
 	
 	net.server_opts.checkdead() # will disconnect if remote connection hasn't sent data in a while
@@ -235,13 +241,13 @@ while True:
 	# handle received move message
 	msg = net.inout_move.recv()
 	if msg != None : recv_move_data(msg)
-	print(data['move']['com']['vel'].val)
+	
 	# handle received opts message
 	msg = net.server_opts.recv()
 	if msg != None : recv_opts_data(net.server_opts, msg)
 	
 	# send move messages
-	if check_timer('stream_movedata'):
+	if check_timer('movedata'):
 		send_move_data(net.inout_move)
 	
 	

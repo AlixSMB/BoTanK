@@ -4,49 +4,40 @@ Object = util.Object
 import numpy as np
 import cv2
 import cv2.aruco as aruco
-import pickle
 import math
 
-CAMERADATA_FILENAME = "camera_calibration_params_laptopcam"
-print(f"Reading camera calibration params from \"{CAMERADATA_FILENAME}\"")
-with open(CAMERADATA_FILENAME, "rb") as filecamera : cameradata = pickle.load(filecamera)
-cam_matrix = cameradata["matrix"]
-cam_coeffs = cameradata["coeffs"]
-
 detect_params = aruco.DetectorParameters_create()
-aruco_cell_size = 0.02; # in meters
-print(f"Aruco cell size set as {aruco_cell_size} m")
-aruco_board = Object(corners=[], ids=[], dictio=aruco.Dictionary_get(aruco.DICT_6X6_250), board=None)
 
-# make checkered grid -------------------------------------------------------------------------------
-grid_nbsquares_w = 7*3 
-grid_nbsquares_h = 5*3
-print(f"Aruco checked grid has dimensions {grid_nbsquares_w}x{grid_nbsquares_h} cells")
-aruco_cell_margin = aruco_cell_size/2 # on the 4 sides of the square cell
-cs = aruco_cell_size + aruco_cell_margin*2
-n=0
-for i in range(grid_nbsquares_w):
-	for j in range(grid_nbsquares_h):
-		if i%2==0 and j%2==0 or i%2!=0 and j%2!=0 : continue
-		
-		aruco_board.ids.append(n)
-		n+=1
-		
-		yt = cs*(j+1) ; yb = cs*j
-		xr = cs*(i+1) ; xl = cs*i
-		aruco_board.corners.append([ [xl,yt,0], [xr,yt,0], [xr,yb,0], [xl,yb,0] ]) # top left corner first, CCW order
-# ----------------------------------------------------------------------------------------------------
+# generate corners and ids for grid type board
+def init_gridboard(grid_nbsquares_w, grid_nbsquares_h, aruco_cell_size)
+	aruco_board = Object(corners=[], ids=[], dictio=aruco.Dictionary_get(aruco.DICT_6X6_250), board=None)
+	
+	aruco_cell_size = 0.014; # in meters
+	print(f"Aruco cell size set as {aruco_cell_size} m")
+	grid_nbsquares_w = 8#7*3 
+	grid_nbsquares_h = 5#5*3
+	print(f"Aruco checked grid has dimensions {grid_nbsquares_w}x{grid_nbsquares_h} cells")
+	
+	aruco_board.ids, aruco_board.corners = util.getGridMarkers(grid_nbsquares_w, grid_nbsquares_h, aruco_cell_size, aruco_cell_size)
+	aruco_board.board = aruco.Board_create(aruco_board.corners, aruco_board.dictio, aruco_board.ids)
+	
+	return aruco_board
 
-aruco_board.board = aruco.Board_create( np.asarray(aruco_board.corners, np.float32), aruco_board.dictio, np.asarray(aruco_board.ids))
+# generate corners and isd automatically from frames, using relative distances between markers
+def auto_make_board(videoframe, board):
+	pass
 
-# get pos / rot of camera relative to board
-def getBoardTransform(videoframe):
-	corners, ids, _ = aruco.detectMarkers(videoframe, aruco_board.dictio, parameters=detect_params)
+# get pos / rot of camera relative to board, the video frame should be distorsion free ! 
+def getBoardTransform(cameradata, videoframe):
+	corners, ids, rejectedCorners = aruco.detectMarkers(videoframe, aruco_board.dictio, parameters=detect_params)
 	if ids is not None and len(corners) > 0:
-		nb_markers, rvec, tvec = aruco.estimatePoseBoard(corners, ids, aruco_board.board, cam_matrix, cam_coeffs, None, None)
+		
+		corners, ids, _,_ = aruco.refineDetectedMarkers(videoframe, aruco_board.board, corners, ids, rejectedCorners)
+		nb_markers, rvec, tvec = aruco.estimatePoseBoard(corners, ids, aruco_board.board, cameradata['matrix'], cameradata['coeffs'], None, None)
+		
 		if nb_markers > 0:
 			aruco.drawDetectedMarkers(videoframe, corners, ids)
-			cv2.drawFrameAxes(videoframe, cam_matrix, cam_coeffs, rvec, tvec, aruco_cell_size*3) 
+			cv2.drawFrameAxes(videoframe, cameradata['matrix'], cameradata['coeffs'], rvec, tvec, aruco_cell_size*3)
 			
 			# get rotation matrix from rotation vector
 			rmat = cv2.Rodrigues(rvec)[0]
@@ -75,37 +66,42 @@ def getBoardTransform(videoframe):
 
 
 # For testing
-#httpvideo = HTTPVideoStream('192.168.1.7', '8080', '/video/mjpeg')
-#camW = 1280 ; camH = 720
-#GST_STRING = \
-#	'nvarguscamerasrc ! '\
-#	'video/x-raw(memory:NVMM), width={capture_width}, height={capture_height}, format=(string)NV12, framerate=(fraction){fps}/1 ! '\
-#	'nvvidconv ! '\
-#	'video/x-raw, width=(int){width}, height=(int){height}, format=(string)BGRx ! '\
-#	'videoconvert ! '\
-#	'video/x-raw, format=(string)BGR ! '\
-#	'appsink'.format(
-#			width=camW,
-#			height=camH,
-#			fps=30,
-#			capture_width=camW,
-#			capture_height=camH
-#	)
-#cap = util.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER)
+'''
+camW = 1280 ; camH = 720
+GST_STRING = \
+	'nvarguscamerasrc ! '\
+	'video/x-raw(memory:NVMM), width={capture_width}, height={capture_height}, format=(string)NV12, framerate=(fraction){fps}/1 ! '\
+	'nvvidconv ! '\
+	'video/x-raw, width=(int){width}, height=(int){height}, format=(string)BGRx ! '\
+	'videoconvert ! '\
+	'video/x-raw, format=(string)BGR ! '\
+	'appsink'.format(
+			width=camW,
+			height=camH,
+			fps=30,
+			capture_width=camW,
+			capture_height=camH
+	)
+cap = util.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER)
 #cap = cv2.VideoCapture(0)
-#cap.set(cv2.CAP_PROP_EXPOSURE, -7)
-#while True:
-#	#videoframe = cv2.imdecode( np.frombuffer(httpvideo.getFrameImg(), dtype=np.uint8), cv2.IMREAD_COLOR)
-#	_, videoframe = cap.read()
-#	#undistort_frame = cv2.undistort(videoframe, cam_matrix, cam_coeffs)
-#	
-#	res = getBoardTransform(videoframe)
-#	#if res is not None:
-#	#	print(res[1]*180/math.pi)
-#	
-#	cv2.imshow("original", videoframe)
-#	if cv2.waitKey(round(1000/30)) == ord('q') : break 
+#cap.set(cv2.CAP_PROP_FRAME_WIDTH, 10000)
+#import glob
+#for image_test in glob.glob('test_images/*.jpg'):
+while True:
+	#image = cv2.imread(image_test)
+	#image = util.fisheye_undistort(cameradata, cv2.cvtColor(cv2.imread(image_test), cv2.COLOR_BGR2GRAY))
+	if 'K' in cameradata: # fisheye
+		image = util.fisheye_undistort(cameradata, cap.read()[1])
+	else : image = cap.read()[1]
+	
+	res = getBoardTransform(image)
+	if res is not None:
+		print(math.atan2(res[1][1], res[1][0])*180/math.pi)
+	
+	cv2.imshow("image", cv2.resize(image, (700, 600)))
+	#cv2.imshow("image tordue", cv2.resize(cap.read()[1], (700, 600)))
+	if cv2.waitKey(round(1000/30)) == ord('q') : break 
 
-
+'''
 # TODO:
 # - try to reuse last tvec,rvec as guess for pos. estimation ?
