@@ -1,9 +1,15 @@
 'use strict';
 
-let cam_port = 81;
-let opts_port = 82;
-let coms_port_in = 83;
-let coms_port_out = 82;
+const cam_port = 8081;
+const opts_port = 8082;
+const coms_port_in = 8083;
+const coms_port_out = 8082;
+
+// default dimensions of aruco grid
+const ARUCO_GRID_NBW = 8;
+const ARUCO_GRID_NBH = 5;
+const ARUCO_GRID_CSIZE = 0.014; // cell size in meters
+const ARUCO_GRID_CMARGIN = ARUCO_GRID_CSIZE;
 
 let getdom = (str, el=document) => [...el.querySelectorAll(str)];
 let uniqueid_gen = function(){
@@ -21,6 +27,7 @@ let obj_set = (obj, keys, val) => {
 	for (let key of keys.slice(0,-1)) obj = obj[key];
 	obj[arr_last(keys)] = val;
 };
+let repeat = (n, el) => Array(n).fill(el);
 
 function resetNodesVals(nodes) { nodes.forEach(node => node.value = node.getAttribute('oldvalue')); }
 function updateNodesVals(nodes){ nodes.forEach(node => node.setAttribute('oldvalue', node.value)); }
@@ -37,7 +44,9 @@ let html_inputzone = (n=1, classes="", values=null, attrs=null, sep="<b>;</b>") 
 			${ values === null ? "value='' oldvalue=''" : `value="${values[ind]}" oldvalue="${values[ind]}"` }
 			class="in_inputzone ${classes}"
 		>`
-	).join(sep);
+	);
+	if (typeof sep == 'string') inputs = inputs.join(sep);
+	else /* array */            inputs = inputs.shift() + inputs.map((str,i) => sep[i]+str);
 	
 	return `<div class="div_inputzone" style="display:inline;">
 			${inputs}<!--
@@ -76,9 +85,9 @@ let html_radiozone = (name, values, checked=0, zoneattr='', attrs=null) => {
 	return `<div class="div_radiozone" style="display:inline;" oldvalue="${values[checked]}" ${zoneattr}>${radios}</div>`;
 };
 function set_radiozone_callbacks(on_click, tankdiv, radioname){
-	getdom(`input[type="radio"][name="${radioname}"]`, tankdiv)[0].addEventListener( 'click', function(){
-		on_click(this.parentNode, this.value);
-	} );
+	getdom(`input[type="radio"][name="${radioname}"]`, tankdiv).forEach(radio => radio.addEventListener( 'change', 
+		function(){ if (this.checked) on_click(this.parentNode, this.value); }
+	));
 }
 function update_radiozone(nodezone){ nodezone.setAttribute( 'oldvalue', getdom('input[checked]', nodezone)[0].value ); }
 function revert_radiozone(nodezone){ getdom(`input`, nodezone).find(node => node.value == nodezone.getAttribute('oldvalue')).checked = true; }
@@ -316,6 +325,11 @@ class Tank{
 					pitch: 0
 				},
 				auto: {on: false}
+			},
+			markers: {
+				type: 'auto',
+				corners: [],
+				ids: []
 			}
 		};
 		
@@ -563,6 +577,27 @@ class Tank{
 		this.gamepad.obj = null;
 	}
 	
+	// grid board or auto discovery of markers ?
+	toggleMarkersType(type){
+		this.data.markers.type = type;
+	}
+	createMarkerGrid(w, h, cs, m){
+		let ids = []
+		let corners = []
+		
+		let s = cs + m*2 // total square size
+		n=0
+		for i in range(nb_w):
+			for j in range(nb_h):
+				
+				ids.append(n) # ids
+				n += 1
+				
+				yt = s*j + cell_m        ; yb = s*j + cell_m+cell_s
+				xr = s*i + cell_m+cell_s ; xl = s*i + cell_m
+				corners.append([ [xl,yt,0], [xl,yb,0], [xr,yb,0], [xr,yt,0] ]) # top left corner first, CCW order
+	}
+	
 	draw(){
 		// draw target flag
 		ctx.save();
@@ -615,6 +650,18 @@ function addTank(){
 				<summary>Cannon</summary>
 				Mode: ${html_radiozone("radio_cannonmode", ["manual", "auto"], tank.data.cannon.auto.on ? 1 : 0, tankidattr)}
 			</details><br>
+			<details>
+				<summary>Markers</summary>
+				Type: ${html_radiozone("radio_boardtype", ["grid", "auto"], tank.data.markers.type == 'auto' ? 1 : 0, tankidattr)}
+				<div class="grid_params" ${tankidattr} style="display:${tank.data.markers.type == 'auto' ? 'none' : 'inline'}">
+					<br>Nb. W: ${html_inputzone(
+						4, 'input_gridparams',
+						[ARUCO_GRID_NBW, ARUCO_GRID_NBH, ARUCO_GRID_CSIZE, ARUCO_GRID_CMARGIN],
+						repeat(4, tankidattr+' size=2'),
+						['   Nb. H: ', '<br>Cell size: ', '   Cell margin: ']
+					)}
+				</div>
+			</details><br>
 			<div>
 				<input type="checkbox" class="check_gamepad" ${tank.gamepad.on ? "checked" : ""} ${tankidattr}>
 				Gamepad ${html_inputzone(
@@ -649,6 +696,9 @@ function addTank(){
 			dispmsgGamepad(nodes[0].value, 'not connected');
 		}
 	}, 1, tankdiv, '.input_gamepadind');
+	set_inputzonebtns_callbacks(
+		nodes => tank.createMarkerGrid(...nodes.map(node => Number(node.value)))
+	, 4, tankdiv, '.input_gridparams');
 	
 	// html_radiozone callbacks
 	set_radiozone_callbacks(
@@ -657,6 +707,12 @@ function addTank(){
 	set_radiozone_callbacks(
 		(nodezone, value) => tank.sendOptsSET(['cannon', 'auto', 'on'], value == 'auto')
 	, tankdiv, 'radio_cannonmode');
+	set_radiozone_callbacks(
+		(nodezone, value) =>{
+			tank.toggleMarkersType(value);
+			getdom('.grid_params')[0].style.display = value == 'auto' ? 'none' : 'inline';
+		}
+	, tankdiv, 'radio_boardtype');
 	
 	// other callbacks
 	getdom('.btn_refresh', tankdiv)[0].addEventListener('click', ()=>tank.refresh() );
@@ -737,6 +793,7 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
+	. resizable video feed
 	. add input to select speed factor for manual / auto control
 	. add separate overlay canvas
 	. canvas add axes
