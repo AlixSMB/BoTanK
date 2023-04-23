@@ -4,6 +4,7 @@ from util import * # util.py
 from positioning import getBoardTransform # positioning.py
 
 import cv2
+from cv2 import aruco
 import numpy as np
 #from adafruit_motorkit import MotorKit
 #kit = MotorKit()
@@ -13,7 +14,7 @@ import time
 import pickle
 
 # load camera data
-CAMERADATA_FILENAME = "jetbot_fisheye_params_1"
+CAMERADATA_FILENAME = "laptopcam_fisheye_params_2"
 print(f"Reading camera calibration params from \"{CAMERADATA_FILENAME}\"")
 with open(CAMERADATA_FILENAME, "rb") as filecamera : cameradata = pickle.load(filecamera)
 
@@ -38,15 +39,16 @@ GST_STRING = \
 			capture_width=camW,
 			capture_height=camH
 	)
-cap = cv2.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) #VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) # from util.py [!]
-#cap = cv2.VideoCapture(0) #VideoCapture(0)
+#cap = cv2.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) #VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) # from util.py [!]
+cap = cv2.VideoCapture(0)
 
 #cap.set(cv2.CAP_PROP_EXPOSURE, -5) # set to 0.25 auto-adjust
+cap.set(cv2.CAP_PROP_FRAME_WIDTH, 10000);
 print(f"Video res.: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
 print(f"Video FPS: {cap.get(cv2.CAP_PROP_FPS)}")
 #print(f"Video exposure: {cap.get(cv2.CAP_PROP_EXPOSURE)}")
 
-ADDR_CTRLPANEL = "192.168.43.75"
+ADDR_CTRLPANEL = "127.0.0.1"
 print(f"Control panel IP set to {ADDR_CTRLPANEL}")
 PORT_CAM = 8081
 PORT_OPTS = 8082
@@ -57,6 +59,9 @@ net = Object(
 	inout_move = UDP(ADDR_CTRLPANEL, PORT_COMS_IN, PORT_COMS_OUT),
 	server_opts = TCPServer(ADDR_CTRLPANEL, PORT_OPTS)
 )
+
+aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
+current_board = None
 
 ''' data is like:
  udp: 
@@ -89,12 +94,19 @@ def recv_setdata(lines):
 		obj = dict_get(data, path)
 		if path[-1] == 'on' : obj.onchange(True if vals[0] == '1' else False)
 		else:
-			for i in range(len(vals)) : vals[i] = float(vals[i])
+			try: # number(s) ?
+				for i in range(len(vals)) : vals[i] = float(vals[i])
+			except : pass
 			if len(vals) == 1 : obj.onchange(vals[0])
 			else              : obj.onchange(vals)
-def recv_move_data(msg):
-	recv_setdata(msg.decode('ascii').split('\n'))
-def recv_opts_data(server, msg):
+def recv_move_data(server):
+	msg = server.recv()
+	if msg is not None : recv_setdata(msg.decode('ascii').split('\n'))
+def recv_opts_data(server):
+	msg = server.recv()
+	if msg is None : return
+	while msg[-2:] != b'\n\n' : msg += server.recv()
+	
 	for part in msg.decode('ascii').split('\n\n'):
 		if part == '' : continue
 		
@@ -117,11 +129,23 @@ def recv_opts_data(server, msg):
 			recv_setdata(lines[1:])
 			server.send(b'OK\n\n')
 		
-		else: # heartbeat
+		elif lines[0] == 'SETMARKERS':
+			mids = []
+			cornersAll = []
+			for line in lines[1:]:
+				if line == '' : continue
+				mtype, mid, corners = line.split(';;');
+				mids.append(int(mid))
+				cornersAll.append([ [float(val) for val in corner.split(',')] for corner in corners.split(';') ])
+				
+			data['markers'][mtype].onchange(mtype, mids, cornersAll)
 			server.send(b'OK\n\n')
+		
+		else: # heartbeat
+			server.send(b'OK\n\n')	
 def send_move_data(server):	
 	msg = ''
-	for key1 in data:
+	for key1 in ['move', 'cannon']:
 		part = data[key1]['real']
 		for key2 in part:
 			obj = part[key2]
@@ -149,6 +173,15 @@ def toggle_move_auto(self, on):
 	self.val = on
 def toggle_canon_auto(self, on):
 	self.val = on
+def update_markers_type(self, mtype):
+	global current_board
+	self.val = mtype
+	current_board = data['markers'][mtype].board
+def update_markers(self, mtype, mids, cornersAll):
+	for i in range(len(mids)) : self.cells[mids[i]] = cornersAll[i]
+	
+	self.board = aruco.Board_create(np.asarray(list(self.cells.values()), np.float32), aruco_dict, np.asarray(list(self.cells.keys()), int))
+	if mtype == data['markers']['type'].val : current_board = self.board
 # update real data
 def set_move_vel(vel):
 	vel[1] *= -1
@@ -183,7 +216,13 @@ data = {
 			'pitch': Object(val=0)
 		},
 		'auto': {'on': Object(val=False, onchange=toggle_canon_auto),}
-	}	
+	},
+	'markers': {
+		'type': Object(val='auto', onchange=update_markers_type),
+		
+		'auto': Object(cells={}, board=None, onchange=update_markers),
+		'grid': Object(cells={}, board=None, onchange=update_markers) 
+	}
 };
 
 timeouts = {
@@ -221,30 +260,28 @@ while True:
 			print("Camera error, quitting...")
 			cap.release()
 			break
-		camera_frame = util.fisheye_undistort(cameradata, camera_frame)
+		
+		camera_frame = fisheye_undistort(cameradata, camera_frame)
+		# compute tank pos, speed
+		if current_board is not None:
+			transfo = getBoardTransform(cameradata, camera_frame, current_board, aruco_dict)
+			if transfo is not None:
+				data['move']['real']['pos'].val = transfo[0]
+				data['move']['real']['dir'].val = transfo[1]
+				if data['move']['auto']['on'].val : auto_move()
 	
 	# stream camera
 	if check_timer('stream_imgframe'):
 		camera_jpegbytes = cv2.imencode('.jpeg', cv2.resize(camera_frame, (cam_sendW,cam_sendH)), [int(cv2.IMWRITE_JPEG_QUALITY), cam_quality])[1].tobytes()
 		net.out_cam.send(camera_jpegbytes)
 	
-	# compute tank pos, speed
-	transfo = getBoardTransform(cameradata, camera_frame)
-	if transfo is not None:
-		data['move']['real']['pos'].val = transfo[0]
-		data['move']['real']['dir'].val = transfo[1]
-		if data['move']['auto']['on'].val : auto_move()
-	
 	net.server_opts.checkdead() # will disconnect if remote connection hasn't sent data in a while
 	net.server_opts.connect() # will accept a connection if none is already established
 	
 	# handle received move message
-	msg = net.inout_move.recv()
-	if msg != None : recv_move_data(msg)
-	
+	recv_move_data(net.inout_move)
 	# handle received opts message
-	msg = net.server_opts.recv()
-	if msg != None : recv_opts_data(net.server_opts, msg)
+	recv_opts_data(net.server_opts)
 	
 	# send move messages
 	if check_timer('movedata'):
