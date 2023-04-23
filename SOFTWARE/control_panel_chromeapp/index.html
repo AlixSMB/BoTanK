@@ -13,7 +13,11 @@
 		
 		<div id="div_map">
 			Map:<br><br>
-			<canvas width=700 height=500></canvas>
+			<div id="div_canvas" style="position: relative;">
+				<canvas id="canvas_main" width=700 height=500></canvas>
+				<canvas id="canvas_overlay" width=700 height=500></canvas>
+				 <!-- input added by js code here -->
+			</div>
 		</div>
 		<div id="div_data">
 			<div style="width:100%;"><input type="button" id="btn_addtank" value="Add tank" style="float:right;"></div><br>

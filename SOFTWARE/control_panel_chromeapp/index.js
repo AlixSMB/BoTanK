@@ -97,15 +97,37 @@ function dispmsgGamepad(ind, msg){
 	msgconsole.innerHTML += `<br>GAMEPAD&lt;${ind}&gt; <b>::</b> ${msg}`;
 }
 
-let canvas = getdom('canvas')[0];
+let canvas = getdom('#canvas_main')[0]; // main canvas
+let canvas_overlay = getdom('#canvas_overlay')[0]; // common overlay canvas
 let canvasW = canvas.width; let canvasH = canvas.height;
-let ctx = canvas.getContext('2d');
-ctx.scale(1, -1);           // set y axis pointing up
-ctx.translate(canvasW/2, -canvasH/2); // origin at bottom left
 
-let BASE_MIN = 5; // min canavs size in meters
-let mPERpx = BASE_MIN/Math.min(canvasW, canvasH);
-ctx.scale(1/mPERpx, 1/mPERpx);
+let base_size = 1; // canavs size in meters
+let pxPerM = Math.min(canvasW, canvasH) / base_size;
+
+let ctx = {main: canvas.getContext('2d'), overlay: canvas_overlay.getContext('2d')};
+for (let key in ctx){
+	ctx[key].scale(1, -1);                     // set y axis pointing up
+	ctx[key].translate(canvasW/2, -canvasH/2); // origin at center
+}
+
+let disp_grid = true;
+let grid_from = 0;
+
+// add to html
+getdom("#div_canvas")[0].style.height = `${canvasH}px`;
+let div_map = getdom("#div_map")[0];
+div_map.insertAdjacentHTML('beforeend', `
+	<br><input type="checkbox" id="check_dispgrid" ${disp_grid ? "checked" : ""}>
+	Grid from tank n°${html_inputzone(1, 'input_gridfrom', [grid_from], ["size=2"])}
+`);
+getdom('#check_dispgrid', div_map)[0].addEventListener('change', function(){ 
+	disp_grid = this.checked;
+	drawOverlay();
+});
+set_inputzone_callback(div_map);
+set_inputzonebtns_callbacks(
+	nodes =>{ grid_from = nodes[0].value; drawOverlay(); }
+, 1, div_map, '.input_gridfrom');
 
 // [!] loops should be deleted/re-created after being stopped [!]
 class Loop{
@@ -328,8 +350,15 @@ class Tank{
 			},
 			markers: {
 				type: 'auto',
-				corners: [],
-				ids: []
+				
+				auto: {
+					corners: [],
+					ids: []
+				},
+				grid: {
+					corners: [],
+					ids: []
+				}
 			}
 		};
 		
@@ -369,7 +398,7 @@ class Tank{
 		
 		this.color = color === null ? Tank.colors[ Tank.colors.length % (this.id+1) ] : color;
 		this.path = new Path2D();
-		let base = 0.2; let height = 0.4; // in m
+		let base = 0.07*pxPerM; let height = 0.1*pxPerM; // in m
 		this.path.moveTo(-base/2,0);
 		this.path.lineTo(base/2, 0);
 		this.path.lineTo(0, height);
@@ -476,6 +505,7 @@ class Tank{
 		let type = typeof val;
 		     if (type == 'boolean') this.sendOptsReq(`SET\n${parts.join(',')};${val ? '1' : '0'}\n\n`);
 		else if (type == 'number')  this.sendOptsReq(`SET\n${parts.join(',')};${val}\n\n`);
+		else if (type == 'string')  this.sendOptsReq(`SET\n${parts.join(',')};${val}\n\n`);
 		else /* array */            this.sendOptsReq(`SET\n${parts.join(',')};${val.join(',')}\n\n`);
 		
 		obj_set(this.data, parts, val);
@@ -486,6 +516,20 @@ class Tank{
 	}
 	sendOptsHeartbeat(rec){
 		this.sendOptsReq('HEARTBEAT\n\n', rec); // the response msg contents will be ignored, only the fact that a response was sent back is important
+	}
+	sendOptsMarkers(){
+		let type = this.data.markers.type;
+		if (type == 'auto') return; // would be useless
+		
+		let ids = this.data.markers[type].ids;
+		let corners = this.data.markers[type].corners;
+		
+		let msg = "SETMARKERS\n";
+		for (let i=0; i<ids.length; i++){
+			msg += `${type};;${ids[i]};;` + corners[i].map(corner => corner.join(',')).join(';') + '\n';
+		}
+		this.sendOptsReq(msg + '\n');
+		this.dispmsg(`"${type}" type marker data sent`);
 	}
 	
 	// send udp stream of move data (from gamepad or other source) as part of loop
@@ -580,40 +624,41 @@ class Tank{
 	// grid board or auto discovery of markers ?
 	toggleMarkersType(type){
 		this.data.markers.type = type;
+		if (type == 'grid') getdom(`.div_tank[tankid="${this.id}"] .grid_params .btn_ok`)[0].click(); // regen grid and send it
+		this.sendOptsSET(['markers', 'type'], type)
 	}
-	createMarkerGrid(w, h, cs, m){
-		let ids = []
-		let corners = []
+	createMarkerGrid(w, h, cs, cm){
+		let ids = [];
+		let corners = [];
 		
-		let s = cs + m*2 // total square size
-		n=0
-		for i in range(nb_w):
-			for j in range(nb_h):
+		let s = cs + cm*2; // total square size
+		let n = 0;
+		for (let i=0; i<w; i++){
+			for (let j=0; j<h; j++){
 				
-				ids.append(n) # ids
-				n += 1
+				ids.push(n);
+				n += 1;
 				
-				yt = s*j + cell_m        ; yb = s*j + cell_m+cell_s
-				xr = s*i + cell_m+cell_s ; xl = s*i + cell_m
-				corners.append([ [xl,yt,0], [xl,yb,0], [xr,yb,0], [xr,yt,0] ]) # top left corner first, CCW order
+				let yt = s*j + cm       ; let yb = s*j + cm+cs;
+				let xr = s*i + cm+cs; let xl = s*i + cm;
+				corners.push([ [xl,yt,0], [xl,yb,0], [xr,yb,0], [xr,yt,0] ]) // top left corner first, CCW order
+			}
+		}
+		
+		this.data.markers.grid.corners = corners;
+		this.data.markers.grid.ids = ids;
+		
+		this.sendOptsMarkers();
+		drawOverlay();
 	}
 	
 	draw(){
-		// draw target flag
-		ctx.save();
-		ctx.translate(...this.data.move.auto.target);
-		ctx.scale(1,-1);
-		let imgw = this.pickerImg.width*mPERpx; 
-		let imgh = this.pickerImg.height*mPERpx; 
-		ctx.drawImage(this.pickerImg, 0, -imgh, imgw, imgh);
-		ctx.restore();
-		// draw tank
-		ctx.save();
-		ctx.fillStyle = this.color;
-		ctx.translate(this.data.move.real.pos[0], this.data.move.real.pos[1]);
-		ctx.rotate(-Math.atan2(this.data.move.real.dir[1], this.data.move.real.dir[0]));
-		ctx.fill(this.path);
-		ctx.restore();
+		ctx.main.save();
+		ctx.main.fillStyle = this.color;
+		ctx.main.translate(this.data.move.real.pos[0]*pxPerM, this.data.move.real.pos[1]*pxPerM);
+		ctx.main.rotate(-Math.atan2(this.data.move.real.dir[1], this.data.move.real.dir[0]));
+		ctx.main.fill(this.path);
+		ctx.main.restore();
 	}
 	
 	dispmsg(msg){
@@ -671,7 +716,7 @@ function addTank(){
 				)}
 			</div>
 			<div>
-				<input type="checkbox" class="check_camera" ${tank.cam.on ? "checked" : ""}></input>Camera feed:
+				<input type="checkbox" class="check_camera" ${tank.cam.on ? "checked" : ""}>Camera feed:
 				<img width=200 style="-webkit-user-select:none;display:block;" ${tankidattr}>
 			</div>
 		</div>
@@ -730,7 +775,7 @@ function addTank(){
 
 let pospicker_tank = null;
 function latch_targetpospicker(tank, node){
-	canvas.style.cursor = `url('${tank.pickerUrl}') 0 24,auto`;
+	canvas_overlay.style.cursor = `url('${tank.pickerUrl}') 0 24,auto`;
 	getdom('.btn_picktargetpos').forEach(el => {
 		el.style.animation = 'none';
 		el.style.boxShadow = null;
@@ -740,20 +785,54 @@ function latch_targetpospicker(tank, node){
 	pospicker_tank = tank;
 }
 function unlatch_targetpospicker(){
-	canvas.style.cursor = 'auto';
+	canvas_overlay.style.cursor = 'auto';
 	getdom('.btn_picktargetpos').forEach(el => {
 		el.style.animation = 'none';
 		el.style.boxShadow = null;
 	});
 	pospicker_tank = null;
+	drawOverlay();
 }
+function drawOverlay(){
+	ctx.overlay.clearRect(-canvasW/2, -canvasH/2, canvasW, canvasH);
+	
+	// draw grid
+	if (disp_grid){
+		let type = tanks[grid_from].data.markers.type;
+		let corners = tanks[grid_from].data.markers[type].corners;
+		let ids = tanks[grid_from].data.markers[type].ids;
+		let color = tanks[grid_from].color;
+		for (let i=0; i<ids.length; i++){
+			
+			ctx.overlay.beginPath();
+			ctx.overlay.lineWidth = 2;
+			ctx.overlay.strokeStyle = 'black';
+			ctx.overlay.moveTo(corners[i][0][0]*pxPerM, corners[i][0][1]*pxPerM);
+			ctx.overlay.lineTo(corners[i][1][0]*pxPerM, corners[i][1][1]*pxPerM);
+			ctx.overlay.lineTo(corners[i][2][0]*pxPerM, corners[i][2][1]*pxPerM);
+			ctx.overlay.lineTo(corners[i][3][0]*pxPerM, corners[i][3][1]*pxPerM);
+			ctx.overlay.closePath();
+			ctx.overlay.stroke();
+			
+		}
+	}
+	
+	// draw targets
+	for (let tank of tanks){
+		ctx.overlay.save();
+		ctx.overlay.translate(tank.data.move.auto.target[0]*pxPerM, tank.data.move.auto.target[1]*pxPerM);
+		ctx.overlay.scale(1,-1);
+		let imgw = tank.pickerImg.width; 
+		let imgh = tank.pickerImg.height; 
+		ctx.overlay.drawImage(tank.pickerImg, 0, -imgh, imgw, imgh);
+		ctx.overlay.restore(); 
+	}
+}
+
 
 let fps = 20;
 window.setInterval(() => {
-	let canvasW_m = canvasW*mPERpx;
-	let canvasH_m = canvasH*mPERpx;
-	
-	ctx.clearRect(-canvasW_m/2, -canvasH_m/2, canvasW_m, canvasH_m);
+	ctx.main.clearRect(-canvasW/2, -canvasH/2, canvasW, canvasH);
 	tanks.forEach( tank => tank.draw() );
 	
 }, 1000/fps)
@@ -761,14 +840,14 @@ window.setInterval(() => {
 
 getdom("#btn_addtank")[0].addEventListener('click', addTank);
 
-canvas.addEventListener("click", ev => {
+canvas_overlay.addEventListener("click", ev => {
 	if (pospicker_tank !== null){
 		ev.preventDefault();
 		
-		let invMat = ctx.getTransform().inverse();
+		let invMat = ctx.overlay.getTransform().inverse();
 		let [x, y] = [ ev.pageX - canvas.getBoundingClientRect().left, ev.pageY - canvas.getBoundingClientRect().top ];
-		x = x * invMat.a + y * invMat.c + invMat.e;
-		y = y * invMat.b + y * invMat.d + invMat.f;
+		x = (x * invMat.a + y * invMat.c + invMat.e)/pxPerM;
+		y = (y * invMat.b + y * invMat.d + invMat.f)/pxPerM;
 		
 		let textfields = getdom(`.input_targetpos[tankid='${pospicker_tank.id}']`);
 		textfields[0].value = x.toFixed(4);
@@ -795,7 +874,6 @@ window.addEventListener("gamepaddisconnected", ev => {
 TODO:
 	. resizable video feed
 	. add input to select speed factor for manual / auto control
-	. add separate overlay canvas
 	. canvas add axes
 	. canvas support scroll / zoom
 	. use input type number
