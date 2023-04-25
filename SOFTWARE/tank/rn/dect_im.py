@@ -24,63 +24,119 @@
 
 
 
+import pickle
+from datetime import datetime
+import os
 import cv2
 import pygame
 import numpy as np
+from pygame.locals import KEYDOWN, K_ESCAPE, K_q, K_s, K_d
+
+
+
 
 # Initialise Pygame, la fenêtre Pygame et la caméra OpenCV
+ecran = (640, 480)
 pygame.init()
 pygame.display.set_caption("Camera Feed")
-screen = pygame.display.set_mode((640, 480))
+screen = pygame.display.set_mode(ecran)
 cap = cv2.VideoCapture(0)
+frame_original = None
 
+
+
+
+
+def dessin_carre():
+	
+	rect_start = None
+	rect_end = None
+	on = False
+	coordonne = []
+	
+	
+	while True:
+		screen.fill([0,0,0])
+		frame = cv2.cvtColor(frame_original, cv2.COLOR_BGR2RGB)
+		frame = frame.swapaxes(0,1)
+		pygame.surfarray.blit_array(screen, frame)
+		
+		# Récupère la position de la souris et dessine un rectangle autour de la zone sélectionnée
+		mouse_pos = pygame.mouse.get_pos()
+		
+		mouseX = mouse_pos[0]
+		mouseY = mouse_pos[1]
+		
+		
+		if rect_start is not None and rect_end is None:
+			pygame.draw.rect(screen, (0, 0, 0), (rect_start, (mouseX - rect_start[0],mouseY - rect_start[1]) ),2)
+		elif rect_start is not None and mouse_pressed[0] == 0:
+			pygame.draw.rect(screen, (0, 0, 0), (rect_start, (rect_end[0] - rect_start[0],rect_end[1] - rect_start[1])),2)
+		
+		mouse_pressed = pygame.mouse.get_pressed()
+		if mouse_pressed[0] and not on:
+			rect_start = None
+			rect_end = None
+			
+			rect_start = (mouseX,mouseY)
+			on = True
+		elif not mouse_pressed[0] and on:
+			rect_end = (mouseX,mouseY)
+			on = False
+			
+		coordonne.append((rect_start,rect_end))			
+		
+		pygame.display.update()		
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				sys.exit(0)
+			elif event.type == KEYDOWN:		
+				if event.key == K_ESCAPE or event.key == K_q:
+					# Enregistre l'image avec le rectangle
+					code = datetime.now().strftime('%d-%m-%Y__%H%M%S')
+					cv2.imwrite(f"images/screenshot{code}.png", frame_original)
+					with open(f"coord/coordonne{code}", "wb") as f : pickle.dump (coordonne, f, 0)
+				
+					return 
+
+	
+					
+	
 
 while True:
 	
-	ret, frame = cap.read()
-	frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-	frame = np.rot90(frame)
-	frame = pygame.surfarray.make_surface(frame)
-	screen.blit(frame, (0, 0))
-	pygame.display.flip()
+	ret, frame_original = cap.read()
+	
+	screen.fill([0,0,0])
+	frame = cv2.cvtColor(frame_original, cv2.COLOR_BGR2RGB)
+	frame = frame.swapaxes(0,1)
+	pygame.surfarray.blit_array(screen, frame)
+	
+	pygame.display.update()
+	
+	for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				sys.exit(0)
+			elif event.type == KEYDOWN:
+				if event.key == K_ESCAPE or event.key == K_q:
+					sys.exit(0)
 
-    #on initialise la touche "s" pour faire un screenshot de l'image
-	keys = pygame.key.get_pressed()
-	if keys[pygame.K_s]:
-		screenshot = pygame.surfarray.array3d(screen)
-		screenshot = np.rot90(screenshot)
-		screenshot = cv2.cvtColor(screenshot, cv2.COLOR_RGB2BGR)
-		cv2.imshow("Screenshot", screenshot)
-		cv2.waitKey(0)
-		cv2.destroyAllWindows()
-
-        # Initialise une surface Pygame pour dessiner le rectangle avec une souris
-		rect_surf = pygame.Surface((640, 480), pygame.SRCALPHA)
-		rect_surf.fill((0, 0, 0, 0))
-		while True:
-			# Affiche l'image capturée
-			screen.blit(pygame.surfarray.make_surface(screenshot), (0, 0))
-			screen.blit(rect_surf, (0, 0))
-
-			# Récupère la position de la souris et dessine un rectangle autour de la zone sélectionnée
-			mouse_pos = pygame.mouse.get_pos()
-			mouse_pressed = pygame.mouse.get_pressed()
-			if mouse_pressed[0]:
-				rect_start = mouse_pos
-			elif mouse_pressed[0] == 0 and rect_start is not None:
-				rect_end = mouse_pos
-				pygame.draw.rect(rect_surf, (255, 0, 0, 100), (rect_start, (rect_end[0] - rect_start[0], rect_end[1] - rect_start[1])))
-				rect_start = None
-			
-			pygame.display.flip()
-			keys = pygame.key.get_pressed() # On quitte la boucle
-			if keys[pygame.K_d]:
-				break
+				elif event.key == K_s:
+					
+					dessin_carre()
+					
+					
+	
 				
-			# Enregistre l'image avec le rectangle
-		cv2.imwrite("screenshot.png", screenshot)
+					
 
-	keys = pygame.key.get_pressed() # On sort de la boucle principale
-	if keys[pygame.K_q]:
-		break
+
+
+
+
+
+
+
+
+
 
