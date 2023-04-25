@@ -1,0 +1,1005 @@
+Sending build context to Docker daemon  79.87kB
+Step 1/34 : FROM nvcr.io/nvidia/l4t-base:r32.7.1
+ ---> 7a58a57ab551
+Step 2/34 : RUN sh -c "echo '/usr/local/cuda/lib64' >> /etc/ld.so.conf.d/nvidia-tegra.conf"
+ ---> Using cache
+ ---> 6bdd848f7e72
+Step 3/34 : RUN ldconfig
+ ---> Using cache
+ ---> 505653386e4a
+Step 4/34 : RUN apt update && apt install -y python3.8 python3.8-dev
+ ---> Using cache
+ ---> e8d9f0bcb1eb
+Step 5/34 : RUN rm /usr/bin/python
+ ---> Using cache
+ ---> 7cf574474f6a
+Step 6/34 : RUN ln -s /usr/bin/python3.8 /usr/bin/python
+ ---> Using cache
+ ---> 6182077654b5
+Step 7/34 : RUN rm /usr/bin/python3
+ ---> Using cache
+ ---> 5e2507aa86be
+Step 8/34 : RUN ln -s /usr/bin/python3.8 /usr/bin/python3
+ ---> Using cache
+ ---> 310c5923ac10
+Step 9/34 : RUN apt-get install -y build-essential cmake git unzip pkg-config libjpeg-dev libpng-dev libtiff-dev libavcodec-dev libavformat-dev libswscale-dev libgtk2.0-dev libcanberra-gtk* libxvidcore-dev libx264-dev libgtk-3-dev libtbb2 libtbb-dev libdc1394-22-dev gstreamer1.0-tools libv4l-dev v4l-utils libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libavresample-dev libvorbis-dev libxine2-dev libfaac-dev libmp3lame-dev libtheora-dev libopencore-amrnb-dev libopencore-amrwb-dev libopenblas-dev libatlas-base-dev libblas-dev liblapack-dev libeigen3-dev gfortran libhdf5-dev protobuf-compiler  libprotobuf-dev libgoogle-glog-dev libgflags-dev
+ ---> Using cache
+ ---> bff8cc70d891
+Step 10/34 : RUN apt install -y python3-pip
+ ---> Using cache
+ ---> bf2ec788b9fd
+Step 11/34 : RUN python -m pip --version
+ ---> Using cache
+ ---> 5190db3277b0
+Step 12/34 : RUN python -m pip install cython
+ ---> Using cache
+ ---> dd48ef4aee1e
+Step 13/34 : RUN python -m pip install numpy
+ ---> Using cache
+ ---> 11fb2114e5d9
+Step 14/34 : ARG OPENCV_VERSION="4.5.2"
+ ---> Using cache
+ ---> d7fc979a81ab
+Step 15/34 : RUN mkdir /opencv &&     cd opencv &&     git clone https://github.com/opencv/opencv.git &&     git clone https://github.com/opencv/opencv_contrib.git
+ ---> Using cache
+ ---> 37e38040b9ee
+Step 16/34 : RUN cd /opencv/opencv && git checkout ${OPENCV_VERSION} &&     cd /opencv/opencv_contrib && git checkout ${OPENCV_VERSION}
+ ---> Using cache
+ ---> b1c1c7775081
+Step 17/34 : ARG COMPUTE_CAPABILITY
+ ---> Using cache
+ ---> cc6ec941cdb4
+Step 18/34 : RUN echo "Compute Capability of ${COMPUTE_CAPABILITY}"
+ ---> Using cache
+ ---> 9fe2dcd54f94
+Step 19/34 : RUN mkdir -p /opencv/opencv/build && cd /opencv/opencv/build &&     cmake -D CMAKE_BUILD_TYPE=RELEASE             -D CMAKE_INSTALL_PREFIX=/usr/local             -D OPENCV_EXTRA_MODULES_PATH=/opencv/opencv_contrib/modules             -D EIGEN_INCLUDE_PATH=/usr/include/eigen3             -D WITH_OPENCL=OFF             -D WITH_CUDA=ON             -D CUDA_ARCH_BIN=${COMPUTE_CAPABILITY}             -D CUDA_ARCH_PTX=""             -D WITH_CUDNN=ON             -D WITH_CUBLAS=ON             -D ENABLE_FAST_MATH=ON             -D CUDA_FAST_MATH=ON             -D OPENCV_DNN_CUDA=ON             -D ENABLE_NEON=ON             -D WITH_QT=OFF             -D WITH_GTK=ON             -D WITH_OPENMP=ON             -D WITH_OPENGL=ON             -D BUILD_TIFF=ON             -D WITH_FFMPEG=ON             -D WITH_GSTREAMER=ON             -D WITH_TBB=ON             -D BUILD_TBB=ON             -D BUILD_TESTS=OFF             -D WITH_EIGEN=ON             -D WITH_V4L=ON             -D WITH_LIBV4L=ON             -D OPENCV_ENABLE_NONFREE=ON             -D INSTALL_C_EXAMPLES=OFF             -D INSTALL_PYTHON_EXAMPLES=OFF             -D BUILD_opencv_python3=TRUE             -D OPENCV_GENERATE_PKGCONFIG=ON             -D BUILD_EXAMPLES=OFF             -D WITH_ARAVIS=OFF             -D BUILD_ARAVIS=OFF ..
+ ---> Using cache
+ ---> 892fbae6ece5
+Step 20/34 : RUN cd /opencv/opencv/build && make -j$(nproc)
+ ---> Running in f7d708d969a4
+Scanning dependencies of target gen-pkgconfig
+[  0%] Generate opencv4.pc
+Scanning dependencies of target libtiff
+Scanning dependencies of target libopenjp2
+[  0%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_aux.c.o
+[  0%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/thread.c.o
+Scanning dependencies of target libwebp
+[  0%] Built target gen-pkgconfig
+[  0%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/bio.c.o
+[  0%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dec/alpha_dec.c.o
+[  0%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/cio.c.o
+[  0%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dec/buffer_dec.c.o
+[  0%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/dwt.c.o
+[  0%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dec/frame_dec.c.o
+[  0%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_close.c.o
+[  0%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/event.c.o
+[  0%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_codec.c.o
+[  0%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_color.c.o
+[  0%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/image.c.o
+[  0%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_compress.c.o
+[  0%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_dir.c.o
+[  0%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dec/idec_dec.c.o
+[  0%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_dirinfo.c.o
+[  0%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dec/io_dec.c.o
+[  0%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_dirread.c.o
+[  0%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dec/quant_dec.c.o
+[  0%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dec/tree_dec.c.o
+[  0%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dec/vp8_dec.c.o
+[  0%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_dirwrite.c.o
+[  1%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dec/vp8l_dec.c.o
+[  1%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dec/webp_dec.c.o
+[  1%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/invert.c.o
+[  1%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/j2k.c.o
+[  1%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_dumpmode.c.o
+[  1%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_error.c.o
+[  1%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/demux/anim_decode.c.o
+[  2%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_extension.c.o
+[  2%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_fax3.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/demux/demux.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/alpha_processing.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/alpha_processing_mips_dsp_r2.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/alpha_processing_neon.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/alpha_processing_sse2.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/alpha_processing_sse41.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/cost.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/cost_mips32.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/cost_mips_dsp_r2.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/cost_neon.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/cost_sse2.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/cpu.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/dec.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/dec_clip_tables.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/dec_mips32.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/dec_mips_dsp_r2.c.o
+[  2%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/dec_msa.c.o
+[  3%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/dec_sse2.c.o
+[  3%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/dec_neon.c.o
+[  3%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/dec_sse41.c.o
+[  4%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/jp2.c.o
+[  4%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/mct.c.o
+[  4%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/mqc.c.o
+[  4%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_fax3sm.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/enc.c.o
+[  4%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_flush.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/enc_mips32.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/enc_mips_dsp_r2.c.o
+[  4%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_getimage.c.o
+[  4%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_jbig.c.o
+[  4%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_jpeg_12.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/enc_msa.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/enc_neon.c.o
+Scanning dependencies of target IlmImf
+[  4%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/Half/half.cpp.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/enc_sse2.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/enc_sse41.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/filters.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/filters_mips_dsp_r2.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/filters_msa.c.o
+[  4%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/openjpeg.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/filters_neon.c.o
+[  4%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/Iex/IexBaseExc.cpp.o
+[  4%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/opj_clock.c.o
+[  4%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/pi.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/filters_sse2.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/lossless.c.o
+[  4%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/Iex/IexThrowErrnoExc.cpp.o
+[  4%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_jpeg.c.o
+[  4%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/t1.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/lossless_enc.c.o
+[  4%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_luv.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/lossless_enc_mips32.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/lossless_enc_mips_dsp_r2.c.o
+[  4%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/lossless_enc_msa.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/lossless_enc_neon.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/lossless_enc_sse2.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/lossless_enc_sse41.c.o
+[  5%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmThread/IlmThread.cpp.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/lossless_mips_dsp_r2.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/lossless_msa.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/lossless_neon.c.o
+[  5%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_lzma.c.o
+[  5%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_lzw.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/lossless_sse2.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/rescaler.c.o
+[  5%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmThread/IlmThreadMutex.cpp.o
+[  5%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_next.c.o
+[  5%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmThread/IlmThreadMutexPosix.cpp.o
+[  5%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmThread/IlmThreadPool.cpp.o
+[  5%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_ojpeg.c.o
+[  5%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_open.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/rescaler_mips32.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/rescaler_mips_dsp_r2.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/rescaler_msa.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/rescaler_neon.c.o
+[  5%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_packbits.c.o
+[  5%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_pixarlog.c.o
+[  5%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_predict.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/rescaler_sse2.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/ssim.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/ssim_sse2.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/upsampling.c.o
+[  5%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmThread/IlmThreadPosix.cpp.o
+[  5%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmThread/IlmThreadSemaphore.cpp.o
+[  5%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmThread/IlmThreadSemaphorePosix.cpp.o
+[  5%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_print.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/upsampling_mips_dsp_r2.c.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/upsampling_msa.c.o
+[  5%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmThread/IlmThreadSemaphorePosixCompat.cpp.o
+[  5%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/upsampling_neon.c.o
+[  5%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_read.c.o
+[  5%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/Imath/ImathBox.cpp.o
+[  5%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/Imath/ImathColorAlgo.cpp.o
+[  5%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_strip.c.o
+[  6%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_swab.c.o
+[  6%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_thunder.c.o
+[  6%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/Imath/ImathFun.cpp.o
+[  6%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_tile.c.o
+[  6%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/Imath/ImathMatrixAlgo.cpp.o
+[  6%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_version.c.o
+[  6%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_warning.c.o
+[  6%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_webp.c.o
+[  6%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_write.c.o
+[  6%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_zip.c.o
+[  6%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_zstd.c.o
+[  6%] Building CXX object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_stream.cxx.o
+[  6%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/upsampling_sse2.c.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/upsampling_sse41.c.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/yuv.c.o
+[  7%] Building C object 3rdparty/libtiff/CMakeFiles/libtiff.dir/tif_unix.c.o
+[  7%] Linking CXX static library ../lib/liblibtiff.a
+[  7%] Built target libtiff
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/yuv_mips32.c.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/yuv_mips_dsp_r2.c.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/yuv_neon.c.o
+[  7%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/Imath/ImathRandom.cpp.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/yuv_sse2.c.o
+[  7%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/Imath/ImathShear.cpp.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/dsp/yuv_sse41.c.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/alpha_enc.c.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/analysis_enc.c.o
+Scanning dependencies of target tbb
+[  7%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/arena.cpp.o
+[  7%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/Imath/ImathVec.cpp.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/backward_references_cost_enc.c.o
+[  7%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/t2.c.o
+[  7%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfAcesFile.cpp.o
+[  7%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/tcd.c.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/backward_references_enc.c.o
+[  7%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/cache_aligned_allocator.cpp.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/config_enc.c.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/cost_enc.c.o
+[  7%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfAttribute.cpp.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/filter_enc.c.o
+[  7%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/concurrent_hash_map.cpp.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/frame_enc.c.o
+[  7%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/tgt.c.o
+[  7%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/function_list.c.o
+[  7%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/histogram_enc.c.o
+[  7%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/concurrent_monitor.cpp.o
+[  8%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/opj_malloc.c.o
+[  8%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfB44Compressor.cpp.o
+[  8%] Building C object 3rdparty/openjpeg/openjp2/CMakeFiles/libopenjp2.dir/sparse_array.c.o
+[  8%] Linking C static library ../../lib/liblibopenjp2.a
+[  8%] Built target libopenjp2
+[  8%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfBoxAttribute.cpp.o
+[  8%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/concurrent_queue.cpp.o
+[  8%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/iterator_enc.c.o
+[  8%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfCRgbaFile.cpp.o
+[  8%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/near_lossless_enc.c.o
+[  8%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/concurrent_vector.cpp.o
+[  8%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/picture_csp_enc.c.o
+[  8%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfChannelList.cpp.o
+[  8%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/condition_variable.cpp.o
+[  8%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfChannelListAttribute.cpp.o
+[  8%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfChromaticities.cpp.o
+[  8%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/picture_enc.c.o
+[  8%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/picture_psnr_enc.c.o
+[  8%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/critical_section.cpp.o
+[  8%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfChromaticitiesAttribute.cpp.o
+[  9%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/picture_rescale_enc.c.o
+[  9%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfCompositeDeepScanLine.cpp.o
+[  9%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/picture_tools_enc.c.o
+[  9%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/dynamic_link.cpp.o
+[  9%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/predictor_enc.c.o
+[  9%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfCompressionAttribute.cpp.o
+[  9%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/governor.cpp.o
+[  9%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfCompressor.cpp.o
+[  9%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/quant_enc.c.o
+[  9%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/itt_notify.cpp.o
+[  9%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfConvert.cpp.o
+[  9%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/market.cpp.o
+[  9%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfDeepCompositing.cpp.o
+[  9%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfDeepFrameBuffer.cpp.o
+[  9%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfDeepImageStateAttribute.cpp.o
+[  9%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/syntax_enc.c.o
+[  9%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfDeepScanLineInputFile.cpp.o
+[  9%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfDeepScanLineInputPart.cpp.o
+[  9%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/token_enc.c.o
+[  9%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/mutex.cpp.o
+[  9%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/tree_enc.c.o
+[  9%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/observer_proxy.cpp.o
+[  9%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/vp8l_enc.c.o
+[  9%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfDeepScanLineOutputFile.cpp.o
+[  9%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/pipeline.cpp.o
+[  9%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/enc/webp_enc.c.o
+[  9%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/mux/anim_encode.c.o
+[  9%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfDeepScanLineOutputPart.cpp.o
+[ 10%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/private_server.cpp.o
+[ 10%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/mux/muxedit.c.o
+[ 10%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/mux/muxinternal.c.o
+[ 10%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfDeepTiledInputFile.cpp.o
+Scanning dependencies of target libprotobuf
+[ 10%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/arena.cc.o
+[ 10%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/mux/muxread.c.o
+[ 10%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/queuing_mutex.cpp.o
+[ 10%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/utils/bit_reader_utils.c.o
+[ 10%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/utils/bit_writer_utils.c.o
+[ 10%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/queuing_rw_mutex.cpp.o
+[ 10%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/utils/color_cache_utils.c.o
+[ 10%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/arenastring.cc.o
+[ 10%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/utils/filters_utils.c.o
+[ 10%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/utils/huffman_encode_utils.c.o
+[ 10%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/reader_writer_lock.cpp.o
+[ 10%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/utils/huffman_utils.c.o
+[ 10%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/extension_set.cc.o
+[ 10%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/utils/quant_levels_dec_utils.c.o
+[ 10%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/recursive_mutex.cpp.o
+[ 11%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/utils/quant_levels_utils.c.o
+[ 11%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/utils/random_utils.c.o
+[ 11%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/utils/rescaler_utils.c.o
+[ 11%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/scheduler.cpp.o
+[ 11%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/utils/thread_utils.c.o
+[ 11%] Building C object 3rdparty/libwebp/CMakeFiles/libwebp.dir/src/utils/utils.c.o
+[ 11%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfDeepTiledInputPart.cpp.o
+[ 11%] Linking C static library ../lib/liblibwebp.a
+[ 11%] Built target libwebp
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfDeepTiledOutputFile.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfDeepTiledOutputPart.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfDoubleAttribute.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfDwaCompressor.cpp.o
+[ 12%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/semaphore.cpp.o
+[ 12%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/spin_mutex.cpp.o
+[ 12%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/spin_rw_mutex.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfEnvmap.cpp.o
+[ 12%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/task.cpp.o
+[ 12%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/generated_message_table_driven_lite.cc.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfEnvmapAttribute.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfFastHuf.cpp.o
+[ 12%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/task_group_context.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfFloatAttribute.cpp.o
+[ 12%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/tbb_main.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfFloatVectorAttribute.cpp.o
+[ 12%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/tbb_misc.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfFrameBuffer.cpp.o
+[ 12%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/tbb_misc_ex.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfFramesPerSecond.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfGenericInputFile.cpp.o
+[ 12%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/tbb_statistics.cpp.o
+[ 12%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/generated_message_util.cc.o
+[ 12%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/tbb_thread.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfGenericOutputFile.cpp.o
+[ 12%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/tbb/x86_rtm_rw_mutex.cpp.o
+[ 12%] Building CXX object 3rdparty/tbb/CMakeFiles/tbb.dir/oneTBB-2020.2/src/rml/client/rml_tbb.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfHeader.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfHuf.cpp.o
+[ 12%] Linking CXX shared library ../../lib/libtbb.so
+[ 12%] Built target tbb
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfIO.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfInputFile.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfInputPart.cpp.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfInputPartData.cpp.o
+[ 12%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/io/coded_stream.cc.o
+[ 12%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfIntAttribute.cpp.o
+[ 13%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfKeyCode.cpp.o
+[ 13%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfKeyCodeAttribute.cpp.o
+[ 13%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfLineOrderAttribute.cpp.o
+[ 13%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfLut.cpp.o
+[ 13%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfMatrixAttribute.cpp.o
+[ 13%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/io/zero_copy_stream.cc.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/io/zero_copy_stream_impl_lite.cc.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfMisc.cpp.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfMultiPartInputFile.cpp.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/message_lite.cc.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/repeated_field.cc.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/atomicops_internals_x86_gcc.cc.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfMultiPartOutputFile.cpp.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/bytestream.cc.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/common.cc.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/int128.cc.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfMultiView.cpp.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/io_win32.cc.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/once.cc.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/status.cc.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfOpaqueAttribute.cpp.o
+Scanning dependencies of target quirc
+[ 14%] Building C object 3rdparty/quirc/CMakeFiles/quirc.dir/src/decode.c.o
+[ 14%] Building C object 3rdparty/quirc/CMakeFiles/quirc.dir/src/quirc.c.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfOutputFile.cpp.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfOutputPart.cpp.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/statusor.cc.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfOutputPartData.cpp.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/stringpiece.cc.o
+[ 14%] Building C object 3rdparty/quirc/CMakeFiles/quirc.dir/src/version_db.c.o
+[ 14%] Linking C static library ../lib/libquirc.a
+[ 14%] Built target quirc
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/stringprintf.cc.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfPartType.cpp.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfPizCompressor.cpp.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/structurally_valid.cc.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfPreviewImage.cpp.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/strutil.cc.o
+[ 14%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/time.cc.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfPreviewImageAttribute.cpp.o
+Scanning dependencies of target carotene_objs
+[ 14%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/absdiff.cpp.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfPxr24Compressor.cpp.o
+[ 14%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/accumulate.cpp.o
+[ 14%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/add.cpp.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfRational.cpp.o
+[ 14%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfRationalAttribute.cpp.o
+[ 15%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfRgbaFile.cpp.o
+[ 15%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/wire_format_lite.cc.o
+[ 15%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/add_weighted.cpp.o
+[ 15%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/bitwise.cpp.o
+[ 15%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/blur.cpp.o
+[ 15%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/canny.cpp.o
+[ 15%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfRgbaYca.cpp.o
+[ 15%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/any.cc.o
+[ 15%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfRle.cpp.o
+[ 15%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfRleCompressor.cpp.o
+[ 15%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/any.pb.cc.o
+[ 15%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/channel_extract.cpp.o
+[ 15%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/channels_combine.cpp.o
+[ 15%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfScanLineInputFile.cpp.o
+[ 15%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/api.pb.cc.o
+[ 16%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/descriptor.cc.o
+[ 16%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/cmp.cpp.o
+[ 16%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfStandardAttributes.cpp.o
+[ 16%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/colorconvert.cpp.o
+[ 16%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/descriptor.pb.cc.o
+[ 16%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfStdIO.cpp.o
+[ 17%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/common.cpp.o
+[ 17%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfStringAttribute.cpp.o
+[ 17%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfStringVectorAttribute.cpp.o
+[ 17%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/convert.cpp.o
+[ 17%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfSystemSpecific.cpp.o
+[ 17%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfTestFile.cpp.o
+[ 17%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfThreading.cpp.o
+[ 17%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfTileDescriptionAttribute.cpp.o
+[ 17%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfTileOffsets.cpp.o
+[ 17%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/convert_depth.cpp.o
+[ 17%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfTiledInputFile.cpp.o
+[ 17%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/convert_scale.cpp.o
+[ 17%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfTiledInputPart.cpp.o
+[ 17%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfTiledMisc.cpp.o
+[ 17%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/convolution.cpp.o
+[ 17%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/count_nonzero.cpp.o
+[ 17%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfTiledOutputFile.cpp.o
+[ 17%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/div.cpp.o
+[ 17%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/descriptor_database.cc.o
+[ 17%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/duration.pb.cc.o
+[ 17%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfTiledOutputPart.cpp.o
+[ 17%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/dot_product.cpp.o
+[ 17%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfTiledRgbaFile.cpp.o
+[ 17%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/dummy.cpp.o
+[ 17%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/fast.cpp.o
+[ 17%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/fill_minmaxloc.cpp.o
+[ 17%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/flip.cpp.o
+[ 18%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfTimeCode.cpp.o
+[ 18%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/gaussian_blur.cpp.o
+[ 18%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/in_range.cpp.o
+[ 18%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfTimeCodeAttribute.cpp.o
+[ 18%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfVecAttribute.cpp.o
+[ 18%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/integral.cpp.o
+[ 18%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/dynamic_message.cc.o
+[ 18%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfVersion.cpp.o
+[ 18%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfWav.cpp.o
+[ 18%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/laplacian.cpp.o
+[ 18%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfZip.cpp.o
+[ 18%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/ImfZipCompressor.cpp.o
+Scanning dependencies of target ittnotify
+[ 18%] Building C object 3rdparty/ittnotify/CMakeFiles/ittnotify.dir/src/ittnotify/ittnotify_static.c.o
+[ 18%] Building CXX object 3rdparty/openexr/CMakeFiles/IlmImf.dir/IlmImf/dwaLookups.cpp.o
+[ 18%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/magnitude.cpp.o
+[ 18%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/empty.pb.cc.o
+[ 18%] Building C object 3rdparty/ittnotify/CMakeFiles/ittnotify.dir/src/ittnotify/jitprofiling.c.o
+[ 18%] Linking C static library ../lib/libittnotify.a
+[ 18%] Built target ittnotify
+Scanning dependencies of target ade
+[ 18%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/alloc.cpp.o
+[ 18%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/meanstddev.cpp.o
+[ 18%] Linking CXX static library ../lib/libIlmImf.a
+[ 18%] Built target IlmImf
+[ 18%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/assert.cpp.o
+Scanning dependencies of target opencv_videoio_plugins
+[ 18%] Built target opencv_videoio_plugins
+[ 18%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/check_cycles.cpp.o
+Scanning dependencies of target numeric
+[ 19%] Building CXX object modules/sfm/src/libmv/libmv/numeric/CMakeFiles/numeric.dir/numeric.cc.o
+[ 19%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/median_filter.cpp.o
+[ 19%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/extension_set_heavy.cc.o
+[ 19%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/min_max.cpp.o
+[ 19%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/edge.cpp.o
+[ 19%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/execution_engine.cpp.o
+[ 20%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/minmaxloc.cpp.o
+[ 20%] Building CXX object modules/sfm/src/libmv/libmv/numeric/CMakeFiles/numeric.dir/poly.cc.o
+[ 20%] Linking CXX static library ../../../../../../lib/libnumeric.a
+[ 20%] Built target numeric
+[ 20%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/morph.cpp.o
+[ 20%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/mul.cpp.o
+[ 20%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/graph.cpp.o
+[ 20%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/field_mask.pb.cc.o
+[ 20%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/memory_accessor.cpp.o
+[ 20%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/generated_message_reflection.cc.o
+[ 20%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/memory_descriptor.cpp.o
+[ 20%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/memory_descriptor_ref.cpp.o
+[ 20%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/memory_descriptor_view.cpp.o
+[ 20%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/metadata.cpp.o
+[ 21%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/metatypes.cpp.o
+[ 21%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/node.cpp.o
+[ 21%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/passes/communications.cpp.o
+[ 21%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/search.cpp.o
+[ 21%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/generated_message_table_driven.cc.o
+[ 21%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/subgraphs.cpp.o
+[ 21%] Building CXX object modules/CMakeFiles/ade.dir/__/3rdparty/ade/ade-0.1.1f/sources/ade/source/topological_sort.cpp.o
+[ 21%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/io/gzip_stream.cc.o
+[ 21%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/io/printer.cc.o
+[ 21%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/io/strtod.cc.o
+[ 21%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/io/tokenizer.cc.o
+[ 21%] Linking CXX static library ../3rdparty/lib/libade.a
+[ 21%] Built target ade
+[ 21%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/io/zero_copy_stream_impl.cc.o
+[ 21%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/map_field.cc.o
+[ 21%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/message.cc.o
+[ 21%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/reflection_ops.cc.o
+[ 21%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/norm.cpp.o
+[ 21%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/opticalflow.cpp.o
+[ 21%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/service.cc.o
+[ 21%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/phase.cpp.o
+[ 21%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/source_context.pb.cc.o
+[ 21%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/pyramid.cpp.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/struct.pb.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/mathlimits.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/stubs/substitute.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/text_format.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/timestamp.pb.cc.o
+[ 22%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/reduce.cpp.o
+[ 22%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/remap.cpp.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/type.pb.cc.o
+[ 22%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/resize.cpp.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/unknown_field_set.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/delimited_message_util.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/field_comparator.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/field_mask_util.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/internal/datapiece.cc.o
+[ 22%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/scharr.cpp.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/internal/default_value_objectwriter.cc.o
+[ 22%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/separable_filter.cpp.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/internal/field_mask_utility.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/internal/json_escaping.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/internal/json_objectwriter.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/internal/json_stream_parser.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/internal/object_writer.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/internal/proto_writer.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/internal/protostream_objectsource.cc.o
+[ 22%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/internal/protostream_objectwriter.cc.o
+[ 22%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/sobel.cpp.o
+[ 22%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/sub.cpp.o
+[ 23%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/internal/type_info.cc.o
+[ 23%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/internal/utility.cc.o
+[ 23%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/sum.cpp.o
+[ 23%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/json_util.cc.o
+[ 23%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/template_matching.cpp.o
+[ 23%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/message_differencer.cc.o
+[ 23%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/time_util.cc.o
+[ 23%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/threshold.cpp.o
+[ 23%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/util/type_resolver_util.cc.o
+[ 23%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/wire_format.cc.o
+[ 23%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/warp_affine.cpp.o
+[ 23%] Building CXX object 3rdparty/protobuf/CMakeFiles/libprotobuf.dir/src/google/protobuf/wrappers.pb.cc.o
+[ 23%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene_objs.dir/src/warp_perspective.cpp.o
+[ 23%] Built target carotene_objs
+Scanning dependencies of target gen_opencv_python_source
+[ 23%] Generate files for Python bindings and documentation
+[ 23%] Linking CXX static library ../lib/liblibprotobuf.a
+[ 23%] Built target libprotobuf
+Scanning dependencies of target carotene
+Scanning dependencies of target tegra_hal
+[ 23%] Building CXX object 3rdparty/carotene/hal/carotene/CMakeFiles/carotene.dir/src/dummy.cpp.o
+[ 23%] Building CXX object 3rdparty/carotene/hal/CMakeFiles/tegra_hal.dir/dummy.cpp.o
+[ 23%] Linking CXX static library ../../../../lib/libcarotene.a
+[ 24%] Linking CXX static library ../../lib/libtegra_hal.a
+[ 24%] Built target carotene
+[ 24%] Built target tegra_hal
+Scanning dependencies of target opencv_cudev
+[ 24%] Building CXX object modules/cudev/CMakeFiles/opencv_cudev.dir/src/stub.cpp.o
+Scanning dependencies of target multiview
+[ 24%] Building CXX object modules/sfm/src/libmv/libmv/multiview/CMakeFiles/multiview.dir/conditioning.cc.o
+[ 24%] Building CXX object modules/sfm/src/libmv/libmv/multiview/CMakeFiles/multiview.dir/euclidean_resection.cc.o
+[ 24%] Linking CXX shared library ../../lib/libopencv_cudev.so
+[ 24%] Built target opencv_cudev
+[ 24%] Building CXX object modules/sfm/src/libmv/libmv/multiview/CMakeFiles/multiview.dir/fundamental.cc.o
+Note: Class Feature2D has more than 1 base class (not supported by Python C extensions)
+      Bases:  cv::Algorithm, cv::class, cv::Feature2D, cv::Algorithm
+      Only the first base class will be used
+Note: Class detail_GraphCutSeamFinder has more than 1 base class (not supported by Python C extensions)
+      Bases:  cv::detail::GraphCutSeamFinderBase, cv::detail::SeamFinder
+      Only the first base class will be used
+[ 24%] Built target gen_opencv_python_source
+[ 24%] Building CXX object modules/sfm/src/libmv/libmv/multiview/CMakeFiles/multiview.dir/fundamental_kernel.cc.o
+[ 24%] Building CXX object modules/sfm/src/libmv/libmv/multiview/CMakeFiles/multiview.dir/homography.cc.o
+[ 24%] Building CXX object modules/sfm/src/libmv/libmv/multiview/CMakeFiles/multiview.dir/panography.cc.o
+[ 24%] Building CXX object modules/sfm/src/libmv/libmv/multiview/CMakeFiles/multiview.dir/panography_kernel.cc.o
+[ 24%] Building CXX object modules/sfm/src/libmv/libmv/multiview/CMakeFiles/multiview.dir/projection.cc.o
+[ 24%] Processing OpenCL kernels (core)
+[ 24%] Building NVCC (Device) object modules/core/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_gpu_mat.cu.o
+[ 24%] Building CXX object modules/sfm/src/libmv/libmv/multiview/CMakeFiles/multiview.dir/robust_estimation.cc.o
+[ 24%] Building CXX object modules/sfm/src/libmv/libmv/multiview/CMakeFiles/multiview.dir/robust_fundamental.cc.o
+[ 24%] Building CXX object modules/sfm/src/libmv/libmv/multiview/CMakeFiles/multiview.dir/robust_resection.cc.o
+[ 24%] Building CXX object modules/sfm/src/libmv/libmv/multiview/CMakeFiles/multiview.dir/triangulation.cc.o
+[ 24%] Building CXX object modules/sfm/src/libmv/libmv/multiview/CMakeFiles/multiview.dir/twoviewtriangulation.cc.o
+[ 24%] Building NVCC (Device) object modules/core/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_gpu_mat_nd.cu.o
+[ 24%] Linking CXX static library ../../../../../../lib/libmultiview.a
+[ 24%] Built target multiview
+Scanning dependencies of target correspondence
+[ 25%] Building CXX object modules/sfm/src/libmv/libmv/correspondence/CMakeFiles/correspondence.dir/matches.cc.o
+[ 25%] Building CXX object modules/sfm/src/libmv/libmv/correspondence/CMakeFiles/correspondence.dir/feature_matching.cc.o
+[ 25%] Building CXX object modules/sfm/src/libmv/libmv/correspondence/CMakeFiles/correspondence.dir/nRobustViewMatching.cc.o
+[ 25%] Linking CXX static library ../../../../../../lib/libcorrespondence.a
+[ 25%] Built target correspondence
+Scanning dependencies of target opencv_core
+[ 25%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/algorithm.cpp.o
+[ 25%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/alloc.cpp.o
+[ 25%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/arithm.cpp.o
+[ 25%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/arithm.dispatch.cpp.o
+[ 25%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/array.cpp.o
+[ 25%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/async.cpp.o
+[ 25%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/batch_distance.cpp.o
+[ 25%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/bindings_utils.cpp.o
+[ 25%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/buffer_area.cpp.o
+[ 25%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/channels.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/check.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/command_line_parser.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/conjugate_gradient.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/convert.dispatch.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/convert_c.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/convert_scale.dispatch.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/copy.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/count_non_zero.dispatch.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/cuda_gpu_mat.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/cuda_gpu_mat_nd.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/cuda_host_mem.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/cuda_info.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/cuda_stream.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/datastructs.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/directx.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/downhill_simplex.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/dxt.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/gl_core_3_1.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/glob.cpp.o
+[ 26%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/hal_internal.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/kmeans.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/lapack.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/lda.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/logger.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/lpsolver.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/lut.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/mathfuncs.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/mathfuncs_core.dispatch.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/matmul.dispatch.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/matrix.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/matrix_c.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/matrix_decomp.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/matrix_expressions.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/matrix_iterator.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/matrix_operations.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/matrix_sparse.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/matrix_transform.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/matrix_wrap.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/mean.dispatch.cpp.o
+[ 27%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/merge.dispatch.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/minmax.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/norm.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/ocl.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/opencl/runtime/opencl_clamdblas.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/opencl/runtime/opencl_clamdfft.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/opencl/runtime/opencl_core.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/opengl.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/out.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/ovx.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/parallel.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/parallel/parallel.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/parallel/parallel_openmp.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/parallel/parallel_tbb.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/parallel_impl.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/pca.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/persistence.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/persistence_json.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/persistence_types.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/persistence_xml.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/persistence_yml.cpp.o
+[ 28%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/rand.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/softfloat.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/split.dispatch.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/stat.dispatch.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/stat_c.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/stl.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/sum.dispatch.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/system.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/tables.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/trace.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/types.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/umatrix.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/utils/datafile.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/utils/filesystem.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/utils/logtagconfigparser.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/utils/logtagmanager.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/utils/samples.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/src/va_intel.cpp.o
+[ 29%] Building CXX object modules/core/CMakeFiles/opencv_core.dir/opencl_kernels_core.cpp.o
+[ 29%] Linking CXX shared library ../../lib/libopencv_core.so
+[ 29%] Built target opencv_core
+[ 29%] Processing OpenCL kernels (imgproc)
+[ 29%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_transpose.cu.o
+Scanning dependencies of target opencv_hdf
+[ 29%] Building CXX object modules/hdf/CMakeFiles/opencv_hdf.dir/src/hdf5.cpp.o
+Scanning dependencies of target opencv_flann
+[ 29%] Building CXX object modules/flann/CMakeFiles/opencv_flann.dir/src/flann.cpp.o
+Scanning dependencies of target opencv_imgproc
+[ 29%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/accum.cpp.o
+[ 29%] Building CXX object modules/flann/CMakeFiles/opencv_flann.dir/src/miniflann.cpp.o
+[ 29%] Linking CXX shared library ../../lib/libopencv_hdf.so
+[ 29%] Built target opencv_hdf
+[ 29%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/accum.dispatch.cpp.o
+[ 29%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/approx.cpp.o
+[ 29%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/bilateral_filter.dispatch.cpp.o
+[ 29%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/blend.cpp.o
+[ 29%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/box_filter.dispatch.cpp.o
+[ 30%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/canny.cpp.o
+[ 30%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_absdiff_mat.cu.o
+[ 30%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/clahe.cpp.o
+[ 30%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/color.cpp.o
+[ 30%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/color_hsv.dispatch.cpp.o
+[ 30%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/color_lab.cpp.o
+[ 30%] Linking CXX shared library ../../lib/libopencv_flann.so
+[ 30%] Built target opencv_flann
+[ 30%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/color_rgb.dispatch.cpp.o
+[ 30%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/color_yuv.dispatch.cpp.o
+[ 30%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/colormap.cpp.o
+[ 31%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_absdiff_scalar.cu.o
+[ 31%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/connectedcomponents.cpp.o
+[ 31%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/contours.cpp.o
+[ 31%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/convhull.cpp.o
+[ 31%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/corner.cpp.o
+[ 31%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/cornersubpix.cpp.o
+Scanning dependencies of target opencv_ml
+[ 31%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/ann_mlp.cpp.o
+[ 31%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/demosaicing.cpp.o
+[ 31%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_add_mat.cu.o
+[ 31%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/deriv.cpp.o
+[ 31%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/boost.cpp.o
+[ 31%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/distransform.cpp.o
+[ 31%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/data.cpp.o
+[ 31%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/drawing.cpp.o
+[ 31%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/emd.cpp.o
+[ 31%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/featureselect.cpp.o
+[ 31%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/em.cpp.o
+[ 31%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/filter.dispatch.cpp.o
+Scanning dependencies of target opencv_surface_matching
+[ 31%] Building CXX object modules/surface_matching/CMakeFiles/opencv_surface_matching.dir/src/icp.cpp.o
+[ 31%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/gbt.cpp.o
+[ 31%] Building CXX object modules/surface_matching/CMakeFiles/opencv_surface_matching.dir/src/pose_3d.cpp.o
+[ 31%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/inner_functions.cpp.o
+[ 32%] Building CXX object modules/surface_matching/CMakeFiles/opencv_surface_matching.dir/src/ppf_helpers.cpp.o
+[ 32%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/kdtree.cpp.o
+[ 32%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_add_scalar.cu.o
+[ 32%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/knearest.cpp.o
+[ 32%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/lr.cpp.o
+[ 32%] Building CXX object modules/surface_matching/CMakeFiles/opencv_surface_matching.dir/src/ppf_match_3d.cpp.o
+[ 33%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/floodfill.cpp.o
+[ 33%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/nbayes.cpp.o
+[ 33%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/rtrees.cpp.o
+[ 33%] Building CXX object modules/surface_matching/CMakeFiles/opencv_surface_matching.dir/src/t_hash_int.cpp.o
+[ 33%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/gabor.cpp.o
+[ 33%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/svm.cpp.o
+[ 33%] Linking CXX shared library ../../lib/libopencv_surface_matching.so
+[ 33%] Built target opencv_surface_matching
+[ 34%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/svmsgd.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/generalized_hough.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/geometry.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/grabcut.cpp.o
+[ 34%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/testset.cpp.o
+[ 34%] Building CXX object modules/ml/CMakeFiles/opencv_ml.dir/src/tree.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/hershey_fonts.cpp.o
+[ 34%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_add_weighted.cu.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/histogram.cpp.o
+[ 34%] Linking CXX shared library ../../lib/libopencv_ml.so
+[ 34%] Built target opencv_ml
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/hough.cpp.o
+[ 34%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_bitwise_mat.cu.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/imgwarp.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/intelligent_scissors.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/intersection.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/linefit.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/lsd.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/main.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/matchcontours.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/median_blur.dispatch.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/min_enclosing_triangle.cpp.o
+[ 34%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_bitwise_scalar.cu.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/moments.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/morph.dispatch.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/phasecorr.cpp.o
+[ 34%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/pyramids.cpp.o
+[ 34%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_cmp_mat.cu.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/resize.cpp.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/rotcalipers.cpp.o
+[ 35%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_cmp_scalar.cu.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/samplers.cpp.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/segmentation.cpp.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/shapedescr.cpp.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/smooth.dispatch.cpp.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/spatialgradient.cpp.o
+[ 35%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_copy_make_border.cu.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/subdivision2d.cpp.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/sumpixels.dispatch.cpp.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/tables.cpp.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/templmatch.cpp.o
+[ 35%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_countnonzero.cu.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/thresh.cpp.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/src/utils.cpp.o
+[ 35%] Building CXX object modules/imgproc/CMakeFiles/opencv_imgproc.dir/opencl_kernels_imgproc.cpp.o
+Scanning dependencies of target opencv_version
+[ 35%] Building CXX object apps/version/CMakeFiles/opencv_version.dir/opencv_version.cpp.o
+[ 35%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_div_mat.cu.o
+[ 35%] Linking CXX shared library ../../lib/libopencv_imgproc.so
+[ 35%] Built target opencv_imgproc
+[ 35%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_div_scalar.cu.o
+[ 36%] Linking CXX executable ../../bin/opencv_version
+[ 36%] Built target opencv_version
+[ 36%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_in_range.cu.o
+[ 36%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_integral.cu.o
+[ 36%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_lut.cu.o
+[ 36%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_math.cu.o
+[ 36%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_minmax.cu.o
+[ 36%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_minmax_mat.cu.o
+[ 36%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_minmaxloc.cu.o
+[ 36%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_mul_mat.cu.o
+[ 37%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_mul_scalar.cu.o
+[ 37%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_mul_spectrums.cu.o
+[ 37%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_norm.cu.o
+[ 37%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_normalize.cu.o
+[ 37%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_polar_cart.cu.o
+[ 37%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_reduce.cu.o
+[ 37%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_split_merge.cu.o
+[ 37%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_sub_mat.cu.o
+[ 37%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_sub_scalar.cu.o
+[ 37%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_sum.cu.o
+[ 37%] Building NVCC (Device) object modules/cudaarithm/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_threshold.cu.o
+Scanning dependencies of target opencv_imgcodecs
+[ 37%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/loadsave.cpp.o
+[ 37%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/utils.cpp.o
+[ 37%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_base.cpp.o
+[ 37%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_bmp.cpp.o
+[ 37%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_exr.cpp.o
+[ 37%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_gdal.cpp.o
+[ 37%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_gdcm.cpp.o
+[ 37%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_hdr.cpp.o
+[ 37%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_jpeg.cpp.o
+[ 38%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_jpeg2000.cpp.o
+[ 38%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_jpeg2000_openjpeg.cpp.o
+[ 38%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_pam.cpp.o
+[ 38%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_pfm.cpp.o
+[ 38%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_png.cpp.o
+[ 38%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_pxm.cpp.o
+[ 38%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_sunras.cpp.o
+[ 38%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_tiff.cpp.o
+[ 38%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/grfmt_webp.cpp.o
+[ 38%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/bitstrm.cpp.o
+Scanning dependencies of target opencv_cudaarithm
+[ 38%] Building CXX object modules/cudaarithm/CMakeFiles/opencv_cudaarithm.dir/src/arithm.cpp.o
+[ 38%] Building CXX object modules/cudaarithm/CMakeFiles/opencv_cudaarithm.dir/src/core.cpp.o
+[ 38%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/rgbe.cpp.o
+[ 38%] Building CXX object modules/cudaarithm/CMakeFiles/opencv_cudaarithm.dir/src/element_operations.cpp.o
+[ 38%] Building CXX object modules/cudaarithm/CMakeFiles/opencv_cudaarithm.dir/src/lut.cpp.o
+[ 38%] Building CXX object modules/cudaarithm/CMakeFiles/opencv_cudaarithm.dir/src/reductions.cpp.o
+[ 38%] Building CXX object modules/imgcodecs/CMakeFiles/opencv_imgcodecs.dir/src/exif.cpp.o
+Scanning dependencies of target opencv_intensity_transform
+[ 38%] Building CXX object modules/intensity_transform/CMakeFiles/opencv_intensity_transform.dir/src/bimef.cpp.o
+[ 38%] Building CXX object modules/intensity_transform/CMakeFiles/opencv_intensity_transform.dir/src/intensity_transform.cpp.o
+[ 38%] Linking CXX shared library ../../lib/libopencv_cudaarithm.so
+[ 38%] Linking CXX shared library ../../lib/libopencv_imgcodecs.so
+[ 38%] Built target opencv_cudaarithm
+Scanning dependencies of target opencv_phase_unwrapping
+[ 38%] Building CXX object modules/phase_unwrapping/CMakeFiles/opencv_phase_unwrapping.dir/src/histogramphaseunwrapping.cpp.o
+[ 38%] Built target opencv_imgcodecs
+Scanning dependencies of target opencv_plot
+[ 38%] Building CXX object modules/plot/CMakeFiles/opencv_plot.dir/src/plot.cpp.o
+Scanning dependencies of target opencv_quality
+[ 38%] Building CXX object modules/quality/CMakeFiles/opencv_quality.dir/src/qualitybrisque.cpp.o
+[ 38%] Linking CXX shared library ../../lib/libopencv_plot.so
+[ 38%] Building CXX object modules/quality/CMakeFiles/opencv_quality.dir/src/qualitygmsd.cpp.o
+[ 38%] Linking CXX shared library ../../lib/libopencv_phase_unwrapping.so
+[ 38%] Built target opencv_plot
+[ 38%] Building CXX object modules/quality/CMakeFiles/opencv_quality.dir/src/qualitymse.cpp.o
+[ 38%] Built target opencv_phase_unwrapping
+[ 38%] Building CXX object modules/quality/CMakeFiles/opencv_quality.dir/src/qualityssim.cpp.o
+Scanning dependencies of target opencv_reg
+[ 38%] Building CXX object modules/reg/CMakeFiles/opencv_reg.dir/src/map.cpp.o
+Scanning dependencies of target opencv_alphamat
+[ 38%] Building CXX object modules/alphamat/CMakeFiles/opencv_alphamat.dir/src/cm.cpp.o
+[ 38%] Linking CXX shared library ../../lib/libopencv_quality.so
+[ 38%] Built target opencv_quality
+[ 38%] Building CXX object modules/alphamat/CMakeFiles/opencv_alphamat.dir/src/infoflow.cpp.o
+[ 38%] Building CXX object modules/reg/CMakeFiles/opencv_reg.dir/src/mapaffine.cpp.o
+[ 38%] Building CXX object modules/reg/CMakeFiles/opencv_reg.dir/src/mapper.cpp.o
+[ 38%] Linking CXX shared library ../../lib/libopencv_intensity_transform.so
+[ 38%] Built target opencv_intensity_transform
+[ 39%] Building CXX object modules/reg/CMakeFiles/opencv_reg.dir/src/mappergradaffine.cpp.o
+[ 39%] Building CXX object modules/reg/CMakeFiles/opencv_reg.dir/src/mappergradeuclid.cpp.o
+[ 39%] Building CXX object modules/alphamat/CMakeFiles/opencv_alphamat.dir/src/intraU.cpp.o
+[ 39%] Building CXX object modules/reg/CMakeFiles/opencv_reg.dir/src/mappergradproj.cpp.o
+[ 39%] Building CXX object modules/reg/CMakeFiles/opencv_reg.dir/src/mappergradshift.cpp.o
+[ 39%] Building CXX object modules/alphamat/CMakeFiles/opencv_alphamat.dir/src/local_info.cpp.o
+[ 39%] Building CXX object modules/reg/CMakeFiles/opencv_reg.dir/src/mappergradsimilar.cpp.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_row_filter.8uc4.cu.o
+[ 39%] Building CXX object modules/reg/CMakeFiles/opencv_reg.dir/src/mapperpyramid.cpp.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.16sc1.cu.o
+[ 39%] Building CXX object modules/reg/CMakeFiles/opencv_reg.dir/src/mapprojec.cpp.o
+[ 39%] Building CXX object modules/reg/CMakeFiles/opencv_reg.dir/src/mapshift.cpp.o
+[ 39%] Linking CXX shared library ../../lib/libopencv_alphamat.so
+[ 39%] Built target opencv_alphamat
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.16sc3.cu.o
+[ 39%] Linking CXX shared library ../../lib/libopencv_reg.so
+[ 39%] Built target opencv_reg
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.16sc4.cu.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.16uc1.cu.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.16uc3.cu.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.16uc4.cu.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.32fc1.cu.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.32fc3.cu.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.32fc4.cu.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.32sc1.cu.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.32sc3.cu.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.32sc4.cu.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.8uc1.cu.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.8uc3.cu.o
+[ 39%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_column_filter.8uc4.cu.o
+[ 40%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_filter2d.cu.o
+[ 40%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_median_filter.cu.o
+[ 40%] Building NVCC (Device) object modules/cudawarping/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_warp.cu.o
+[ 41%] Building NVCC (Device) object modules/cudawarping/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_pyr_down.cu.o
+[ 41%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_slice.cu.o
+[ 41%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_row_filter.16sc1.cu.o
+[ 41%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_activation_eltwise.cu.o
+[ 41%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_activations.cu.o
+[ 41%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_row_filter.16sc3.cu.o
+[ 41%] Processing OpenCL kernels (features2d)
+Scanning dependencies of target opencv_features2d
+[ 41%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/affine_feature.cpp.o
+[ 41%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_bias_activation.cu.o
+[ 41%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/agast.cpp.o
+[ 41%] Building NVCC (Device) object modules/cudawarping/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_pyr_up.cu.o
+[ 41%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/agast_score.cpp.o
+[ 41%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/akaze.cpp.o
+[ 41%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_bias_activation_eltwise.cu.o
+[ 41%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/bagofwords.cpp.o
+[ 41%] Building NVCC (Device) object modules/cudawarping/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_remap.cu.o
+[ 41%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/blobdetector.cpp.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/brisk.cpp.o
+[ 42%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_bias_eltwise_activation.cu.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/draw.cpp.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/dynamic.cpp.o
+[ 42%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_row_filter.16sc4.cu.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/evaluation.cpp.o
+[ 42%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_concat.cu.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/fast.cpp.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/fast_score.cpp.o
+[ 42%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_crop_and_resize.cu.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/feature2d.cpp.o
+[ 42%] Building NVCC (Device) object modules/cudawarping/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_resize.cu.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/gftt.cpp.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/kaze.cpp.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/kaze/AKAZEFeatures.cpp.o
+[ 42%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_detection_output.cu.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/kaze/KAZEFeatures.cpp.o
+Scanning dependencies of target opencv_cudawarping
+[ 42%] Building CXX object modules/cudawarping/CMakeFiles/opencv_cudawarping.dir/src/pyramids.cpp.o
+[ 42%] Building CXX object modules/cudawarping/CMakeFiles/opencv_cudawarping.dir/src/remap.cpp.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/kaze/fed.cpp.o
+[ 42%] Building CXX object modules/cudawarping/CMakeFiles/opencv_cudawarping.dir/src/resize.cpp.o
+[ 42%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_eltwise_activation.cu.o
+[ 42%] Building CXX object modules/cudawarping/CMakeFiles/opencv_cudawarping.dir/src/warp.cpp.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/kaze/nldiffusion_functions.cpp.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/keypoint.cpp.o
+[ 42%] Linking CXX shared library ../../lib/libopencv_cudawarping.so
+[ 42%] Built target opencv_cudawarping
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/main.cpp.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/matchers.cpp.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/mser.cpp.o
+[ 42%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_row_filter.16uc1.cu.o
+[ 42%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_eltwise_ops.cu.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/orb.cpp.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/src/sift.dispatch.cpp.o
+[ 42%] Building CXX object modules/features2d/CMakeFiles/opencv_features2d.dir/opencl_kernels_features2d.cpp.o
+Scanning dependencies of target opencv_freetype
+[ 42%] Building CXX object modules/freetype/CMakeFiles/opencv_freetype.dir/src/freetype.cpp.o
+[ 43%] Linking CXX shared library ../../lib/libopencv_features2d.so
+[ 43%] Built target opencv_features2d
+[ 43%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_fill_copy.cu.o
+[ 43%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_row_filter.16uc3.cu.o
+[ 43%] Linking CXX shared library ../../lib/libopencv_freetype.so
+[ 43%] Built target opencv_freetype
+[ 43%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_row_filter.16uc4.cu.o
+[ 43%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_fp_conversion.cu.o
+[ 43%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_grid_nms.cu.o
+[ 43%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_row_filter.32fc1.cu.o
+[ 43%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_max_unpooling.cu.o
+[ 44%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_mvn.cu.o
+[ 44%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_row_filter.32fc3.cu.o
+[ 44%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_normalize.cu.o
+[ 44%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_row_filter.32fc4.cu.o
+[ 44%] Building NVCC (Device) object modules/cudafilters/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_row_filter.32sc1.cu.o
+[ 44%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_padding.cu.o
+[ 44%] Building NVCC (Device) object modules/dnn/CMakeFiles/cuda_compile_1.dir/src/cuda/cuda_compile_1_generated_permute.cu.o
+^C

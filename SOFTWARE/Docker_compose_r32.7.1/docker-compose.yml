@@ -1,0 +1,49 @@
+version: "3.9"
+services:
+   main:
+      image: botank_r32.7.1
+      stdin_open: true # docker run -i
+      tty: true        # docker run -t
+      
+      # impractical, need re-login to update groups
+      #user: ${BOTANK_UID}:${BOTANK_GID}
+      command: su ${BOTANK_USER}      
+
+      # ports:
+      #    # it seems the USMB VPN blocks 8081 and 8082 ;(
+      #    - 81:81
+      #    - 82:82
+      #    - 8081:8081
+      #    - 8082:8082
+      #    - 5555:5555
+      network_mode: "host"
+      privileged: true
+      ipc: "host"
+      #devices:
+         #- "/dev/video0:/dev/video0:crw"
+         #- "/dev/i2c*:/dev/i2c*:crw"
+
+      environment:
+         - DISPLAY=$DISPLAY
+
+      deploy:
+         resources:
+            reservations:
+               devices:
+                  - capabilities: ["compute"]
+                    count: all
+                  - capabilities: ["gpu"]
+                    driver: nvidia
+                    count: all
+ 
+      working_dir: /home/${BOTANK_USER}/botank/Repo/
+      volumes:
+         - ~/:/home/${BOTANK_USER}
+         # import users and groups
+         - /etc/passwd:/etc/passwd:ro
+         - /etc/group:/etc/group:ro
+         - /etc/shadow:/etc/shadow:ro
+         # access camera
+         - /tmp/argus_socket:/tmp/argus_socket
+         # access X server
+         - /tmp/.X11-unix:/tmp/.X11-unix
