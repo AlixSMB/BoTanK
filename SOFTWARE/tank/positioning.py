@@ -35,7 +35,8 @@ def auto_make_board(cameradata, videoframe, m_obj, ms, dictio):
 	if ids is not None and len(ids) > 1:
 		
 		rvecs, tvecs, objpoints = aruco.estimatePoseSingleMarkers(corners, ms, cameradata['matrix'], cameradata['coeffs'], estimateParameters=estimate_param)
-		local_corners = np.array([[0,0,0,1],[ms,0,0,1],[ms,ms,0,1],[0,ms,0,1]], dtype=np.float32) # [x,y,z,1]*4
+		local_corners = np.array([[0,0,0,1],[ms,0,0,1],[ms,ms,0,1],[0,ms,0,1]], dtype=np.float32) # CW order [x,y,z,1]*4
+		#local_corners = np.array([[0,0,0,1],[0,ms,0,1],[ms,ms,0,1],[ms,0,0,1]], dtype=np.float32) # CCW order [x,y,z,1]*4
 		
 		for mid in ids[:,0]:
 			if not (mid in m_obj.cells_tmp): # discovered new marker

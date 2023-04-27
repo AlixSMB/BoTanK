@@ -112,7 +112,11 @@ def recv_opts_data(server):
 		if part == '' : continue
 		
 		lines = part.split('\n')
-		if lines[0] == 'GET':
+		
+		if lines[0] == 'HEARTBEAT':
+			server.send(b'OK\n\n')
+		
+		elif lines[0] == 'GET':
 			res = ''
 			for line in lines[1:]:
 				if line == '' : continue
@@ -142,8 +146,24 @@ def recv_opts_data(server):
 			data['markers'][mtype].onchange(mtype, mids, cornersAll)
 			server.send(b'OK\n\n')
 		
-		else: # heartbeat
-			server.send(b'OK\n\n')	
+		elif lines[0] == 'DO':
+			
+			if lines[1] == 'SNAPAUTOBOARD':
+				if auto_make_board(cameradata, camera_frame, data['markers']['auto'], data['markers']['auto_s'].val, aruco_dict):
+					send_auto_markers()
+				server.send(b'OK\n\n')
+			
+			elif lines[1] == 'RESETAUTOBOARD':
+				reset_auto_board()
+				server.send(b'OK\n\n')
+			
+			else :
+				console.log(f"Received unknown \"DO\" request \"{lines[0]}\"")
+				server.send(b'ERR\n\n')	
+		
+		else :
+			console.log(f"Received unknown opts request \"{lines[0]}\"")
+			server.send(b'ERR\n\n')
 def send_move_data(server):	
 	msg = ''
 	for key1 in ['move', 'cannon']:
@@ -189,9 +209,15 @@ def update_markers(self, mtype, mids, cornersAll):
 	self.board = aruco.Board_create(np.asarray(list(self.cells.values()), np.float32), aruco_dict, np.asarray(list(self.cells.keys()), int))
 def update_auto_markers_size(self, msize):
 	self.val = msize
+	reset_auto_board()
+
+def reset_auto_board():
+	global current_mobj
+	
 	data['markers']['auto'] = newAutoBoard()
-	send_auto_markers() # will send empty list of markers
-# update real data
+	if data['markers']['type'].val == 'auto':
+		current_mobj = data['markers']['auto']
+		send_auto_markers() # will send empty list of markers
 def set_move_vel(vel):
 	vel[1] *= -1
 	data['move']['real']['vel'].val = vel
@@ -284,9 +310,9 @@ while True:
 		camera_frame = fisheye_undistort(cameradata, camera_frame)
 		
 		# build marker board
-		if data['markers']['type'].val == 'auto':
-			if auto_make_board(cameradata, camera_frame, data['markers']['auto'], data['markers']['auto_s'].val, aruco_dict):
-				send_auto_markers()
+		#if data['markers']['type'].val == 'auto':
+		#	if auto_make_board(cameradata, camera_frame, data['markers']['auto'], data['markers']['auto_s'].val, aruco_dict):
+		#		send_auto_markers()
 		
 		# compute tank pos, speed
 		if current_mobj is not None:
