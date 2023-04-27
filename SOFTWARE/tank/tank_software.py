@@ -1,7 +1,7 @@
 # Note for windows CMD: if QuickEdit mode is enabled, clicking the console freezes the script until a keyboard key is pressed... 
 
 from util import * # util.py
-from positioning import getBoardTransform # positioning.py
+from positioning import getBoardTransform, auto_make_board # positioning.py
 
 import cv2
 from cv2 import aruco
@@ -42,7 +42,7 @@ GST_STRING = \
 #cap = cv2.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) #VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) # from util.py [!]
 cap = cv2.VideoCapture(0)
 
-#cap.set(cv2.CAP_PROP_EXPOSURE, -5) # set to 0.25 auto-adjust
+cap.set(cv2.CAP_PROP_EXPOSURE, -4) # set to 0.25 auto-adjust
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 10000);
 print(f"Video res.: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
 print(f"Video FPS: {cap.get(cv2.CAP_PROP_FPS)}")
@@ -54,14 +54,15 @@ PORT_CAM = 8081
 PORT_OPTS = 8082
 PORT_COMS_IN = 8082
 PORT_COMS_OUT = 8083
+HEARTBEAT_MAXTIME = 3
 net = Object(
 	out_cam = UDP(ADDR_CTRLPANEL, None, PORT_CAM),
 	inout_move = UDP(ADDR_CTRLPANEL, PORT_COMS_IN, PORT_COMS_OUT),
-	server_opts = TCPServer(ADDR_CTRLPANEL, PORT_OPTS)
+	server_opts = TCPServer(ADDR_CTRLPANEL, PORT_OPTS, HEARTBEAT_MAXTIME)
 )
 
 aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
-current_board = None
+current_mobj = None
 
 ''' data is like:
  udp: 
@@ -155,7 +156,12 @@ def send_move_data(server):
 				if isinstance(obj.val, (list, np.ndarray)) : msg += f"{key1},real,{key2};{ ','.join([str(el) for el in obj.val]) }\n"
 				else                         : msg += f"{key1},real,{key2};{str(obj.val)}\n"
 	server.send(msg.encode('ascii'))
-
+def send_auto_markers():
+	msg = "SETAUTOMARKERS\n"
+	mids = list(data['markers']['auto'].cells.keys())
+	cornersAll = list(data['markers']['auto'].cells.values())
+	for i in range(len(mids)) : msg += str(mids[i]) + ";;" + str.join(';', [str.join(',', [str(el) for el in corner]) for corner in cornersAll[i]]) + '\n';
+	net.server_opts.send( (msg+'\n').encode('ascii') )
 # update data from coms channel (remote)
 def update_data(self, val):
 	self.val = val
@@ -174,20 +180,31 @@ def toggle_move_auto(self, on):
 def toggle_canon_auto(self, on):
 	self.val = on
 def update_markers_type(self, mtype):
-	global current_board
+	global current_mobj
 	self.val = mtype
-	current_board = data['markers'][mtype].board
+	current_mobj = data['markers'][mtype]
+	if mtype == 'auto' : send_auto_markers()
 def update_markers(self, mtype, mids, cornersAll):
 	for i in range(len(mids)) : self.cells[mids[i]] = cornersAll[i]
-	
 	self.board = aruco.Board_create(np.asarray(list(self.cells.values()), np.float32), aruco_dict, np.asarray(list(self.cells.keys()), int))
-	if mtype == data['markers']['type'].val : current_board = self.board
+def update_auto_markers_size(self, msize):
+	self.val = msize
+	data['markers']['auto'] = newAutoBoard()
+	send_auto_markers() # will send empty list of markers
 # update real data
 def set_move_vel(vel):
 	vel[1] *= -1
 	data['move']['real']['vel'].val = vel
 	kit.motor1.throttle = 0.9 if vel[0] > 0.9 else (-0.9 if vel[0] < -0.9 else vel[0]) 
 	kit.motor2.throttle = 0.9 if vel[1] > 0.9 else (-0.9 if vel[1] < -0.9 else vel[1])
+
+def newAutoBoard():
+	return Object(
+		cells = {}, cells_tmp = {}, cells_i = {}, # cells contains cells positioned relative to origin with smallest id, cells_tmp contains all cells
+		board = None,                             # cells_i = cells info (in_refs, out_ref, etc..., ms = marker size, orig = origin id 
+		orig = 9999
+	)
+
 data = {
 	'move': {
 		'com': { # command
@@ -220,7 +237,9 @@ data = {
 	'markers': {
 		'type': Object(val='auto', onchange=update_markers_type),
 		
-		'auto': Object(cells={}, board=None, onchange=update_markers),
+		'auto_s': Object(val=0.035, onchange=update_auto_markers_size), # 5 centimeters by default, modifiable by control panel
+		'auto': newAutoBoard(),
+		
 		'grid': Object(cells={}, board=None, onchange=update_markers) 
 	}
 };
@@ -250,9 +269,10 @@ def auto_move():
 
 set_timer('stream_imgframe', 1/20) # 20 fps
 set_timer('movedata', 1/10) # 10 fps
+transfo = None
 while True:
 	timers_start()
-	
+
 	# read new camera frame
 	if check_timer('movedata'):	
 		ret, camera_frame = cap.read()
@@ -262,9 +282,15 @@ while True:
 			break
 		
 		camera_frame = fisheye_undistort(cameradata, camera_frame)
+		
+		# build marker board
+		if data['markers']['type'].val == 'auto':
+			if auto_make_board(cameradata, camera_frame, data['markers']['auto'], data['markers']['auto_s'].val, aruco_dict):
+				send_auto_markers()
+		
 		# compute tank pos, speed
-		if current_board is not None:
-			transfo = getBoardTransform(cameradata, camera_frame, current_board, aruco_dict)
+		if current_mobj is not None:
+			transfo = getBoardTransform(cameradata, camera_frame, current_mobj.board, aruco_dict, transfo)
 			if transfo is not None:
 				data['move']['real']['pos'].val = transfo[0]
 				data['move']['real']['dir'].val = transfo[1]
@@ -296,8 +322,7 @@ while True:
 # TODO:
 
 #	- Ajouter code obstacles (obstacles via camera + ajout manuel via interface)
-
-#	- check regularly that vel data is received if vel is set to something other than 0,0
+#	- use getBoardObjectAndImagePoints and solvePnP instead of estimatePoseBoard ?
 # 	- optimize code:
 #		- for ... in list(...dict...)
 #		- use dict for url dispatcher ?

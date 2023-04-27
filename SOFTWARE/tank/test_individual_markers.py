@@ -1,9 +1,16 @@
 import numpy as np
 import cv2
 import cv2.aruco as aruco
-from util import Object, fisheye_undistort
-from positioning import getInvTransformationMatrix, getTransformationMatrix
 import pickle
+
+from util import Object, fisheye_undistort
+from positioning import auto_make_board, getBoardTransform
+def newAutoBoard():
+	return Object(
+		cells = {}, cells_tmp = {}, cells_i = {}, # cells contains cells positioned relative to origin with smallest id, cells_tmp contains all cells
+		board = None,                             # cells_i = cells info (in_refs, out_ref, etc..., ms = marker size, orig = origin id 
+		orig = 9999
+	)
 
 
 cap = cv2.VideoCapture(0)
@@ -13,11 +20,28 @@ CAMERADATA_FILENAME = "laptopcam_fisheye_params_2"
 print(f"Reading camera calibration params from \"{CAMERADATA_FILENAME}\"")
 with open(CAMERADATA_FILENAME, "rb") as filecamera : cameradata = pickle.load(filecamera)
 
+
 dictio = aruco.Dictionary_get(aruco.DICT_6X6_250)
 detect_params = aruco.DetectorParameters_create()
 estimate_param = aruco.EstimateParameters.create()
 estimate_param.pattern = aruco.CW_top_left_corner
 
+m_obj = newAutoBoard()
+
+transfo = None
+while True:
+	videoframe = fisheye_undistort(cameradata, cap.read()[1])
+	
+	if auto_make_board(cameradata, videoframe, m_obj, 0.035, dictio):
+		pass#print(m_obj.cells)
+	transfo = getBoardTransform(cameradata, videoframe, m_obj.board, dictio, transfo)
+	
+	cv2.imshow("image", cv2.resize(videoframe, (700, 600)))
+	keycode = cv2.waitKey(round(1000/30))
+	if keycode == ord('q') : break
+
+
+'''
 marker_s = 0.035
 local_corners = np.array([[0,0,0,1],[marker_s,0,0,1],[marker_s,marker_s,0,1],[0,marker_s,0,1]], dtype=np.float32) # [x,y,z,1]*4
 world_markers = {} 
@@ -90,3 +114,4 @@ while True:
 
 for mid in world_markers:
 	print(f"ID {mid}: {world_markers[mid].corners}, ref: {world_markers[mid].out_ref}")
+'''
