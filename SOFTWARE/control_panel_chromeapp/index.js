@@ -516,6 +516,7 @@ class Tank{
 		
 		this.data.markers.auto.corners = cornersAll;
 		this.data.markers.auto.ids = mids;
+		getdom(`.div_tank[tankid="${this.id}"] .nb_markers`)[0].innerHTML = mids.length;
 		drawOverlay();
 	}
 	// send opts request to tcp server
@@ -746,7 +747,8 @@ function addTank(){
 							[ARUCO_GRID_CSIZE], [tankidattr+' size=2']
 						)}
 						<br><input type="button" class="btn_addmarkers" value="Add markers">
-						<input type="button" class="btn_resetmarkers" value="Reset markers">
+						<input type="button" class="btn_resetmarkers" value="Reset markers"><br>
+						<span class="nb_markers">0</span> markers found
 					</div>
 				</div>	
 			</details><br>
@@ -916,6 +918,7 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
+	. add ability to delete specific markers from auto board
 	. add support for multiple tanks (using different ports ?)
 	. add input to select speed factor for manual / auto control
 	. canvas add axes
