@@ -351,6 +351,7 @@ class Tank{
 			markers: {
 				type: 'auto',
 				
+				auto_s: 0.035,
 				auto: {
 					corners: [],
 					ids: []
@@ -536,6 +537,10 @@ class Tank{
 	sendOptsGET(parts){ // send GET request
 		this.sendOptsReq(`GET\n${parts.join(',')}\n\n`, this.parseData);
 	}
+	sendOptsDO(action, desc=null){ // send DO request
+		this.sendOptsReq(`DO\n${action}\n\n`);
+		this.dispmsg(`"${desc == null ? action : desc}" done"`);
+	}
 	sendOptsHeartbeat(rec){
 		this.sendOptsReq('HEARTBEAT\n\n', rec); // the response msg contents will be ignored, only the fact that a response was sent back is important
 	}
@@ -646,8 +651,14 @@ class Tank{
 	// grid board or auto discovery of markers ?
 	toggleMarkersType(type){
 		this.data.markers.type = type;
-		if (type == 'grid') getdom(`.div_tank[tankid="${this.id}"] .grid_params .btn_ok`)[0].click(); // regen grid and send it
+		
+		getdom(`.div_tank[tankid="${this.id}"] .markers_params`).forEach( node => node.style.display = "none" ); // hide all parameters divs
+		getdom(`.div_tank[tankid="${this.id}"] .${type}_params`)[0].style.display = "inline";
+		
 		this.sendOptsSET(['markers', 'type'], type)
+		
+		if (type == 'grid') getdom(`.div_tank[tankid="${this.id}"] .grid_params .btn_ok`)[0].click(); // regen grid and send it
+		else drawOverlay();
 	}
 	createMarkerGrid(w, h, cs, cm){
 		let ids = [];
@@ -720,14 +731,24 @@ function addTank(){
 			<details>
 				<summary>Markers</summary>
 				Type: ${html_radiozone("radio_boardtype", ["grid", "auto"], tank.data.markers.type == 'auto' ? 1 : 0, tankidattr)}
-				<div class="grid_params" ${tankidattr} style="display:${tank.data.markers.type == 'auto' ? 'none' : 'inline'}">
-					<br>Nb. W: ${html_inputzone(
-						4, 'input_gridparams',
-						[ARUCO_GRID_NBW, ARUCO_GRID_NBH, ARUCO_GRID_CSIZE, ARUCO_GRID_CMARGIN],
-						repeat(4, tankidattr+' size=2'),
-						['   Nb. H: ', '<br>Cell size: ', '   Cell margin: ']
-					)}
-				</div>
+				<div class="markers_params_container">
+					<div class="markers_params grid_params" ${tankidattr} style="display:${tank.data.markers.type == 'grid' ? 'inline' : 'none'}">
+						Nb. W: ${html_inputzone(
+							4, 'input_gridparams',
+							[ARUCO_GRID_NBW, ARUCO_GRID_NBH, ARUCO_GRID_CSIZE, ARUCO_GRID_CMARGIN],
+							repeat(4, tankidattr+' size=2'),
+							['   Nb. H: ', '<br>Cell size: ', '   Cell margin: ']
+						)}
+					</div>
+					<div class="markers_params auto_params" ${tankidattr} style="display:${tank.data.markers.type == 'auto' ? 'inline' : 'none'}">
+						Cell size: ${html_inputzone(
+							1, 'input_autoparams',
+							[ARUCO_GRID_CSIZE], [tankidattr+' size=2']
+						)}
+						<br><input type="button" class="btn_addmarkers" value="Add markers">
+						<input type="button" class="btn_resetmarkers" value="Reset markers">
+					</div>
+				</div>	
 			</details><br>
 			<div>
 				<input type="checkbox" class="check_gamepad" ${tank.gamepad.on ? "checked" : ""} ${tankidattr}>
@@ -768,6 +789,9 @@ function addTank(){
 	set_inputzonebtns_callbacks(
 		nodes => tank.createMarkerGrid(...nodes.map(node => Number(node.value)))
 	, 4, tankdiv, '.input_gridparams');
+	set_inputzonebtns_callbacks(
+		nodes => tank.sendOptsSET(['markers', 'auto_s'], Number(nodes[0].value))
+	, 1, tankdiv, '.input_autoparams');
 	
 	// html_radiozone callbacks
 	set_radiozone_callbacks(
@@ -777,10 +801,7 @@ function addTank(){
 		(nodezone, value) => tank.sendOptsSET(['cannon', 'auto', 'on'], value == 'auto')
 	, tankdiv, 'radio_cannonmode');
 	set_radiozone_callbacks(
-		(nodezone, value) =>{
-			tank.toggleMarkersType(value);
-			getdom('.grid_params')[0].style.display = value == 'auto' ? 'none' : 'inline';
-		}
+		(nodezone, value) => tank.toggleMarkersType(value)
 	, tankdiv, 'radio_boardtype');
 	
 	// other callbacks
@@ -795,6 +816,8 @@ function addTank(){
 		if (this.checked) tank.initCamStream();
 		else              tank.closeCamStream();
 	});
+	getdom('.btn_addmarkers', tankdiv)[0].addEventListener('click', function(){ tank.sendOptsDO('SNAPAUTOBOARD', '"Add auto markers"'); });
+	getdom('.btn_resetmarkers', tankdiv)[0].addEventListener('click', function(){ tank.sendOptsDO('RESETAUTOBOARD', '"Reset auto markers"'); });
 }
 
 let pospicker_tank = null;
