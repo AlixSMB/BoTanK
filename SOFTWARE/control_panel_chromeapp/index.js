@@ -418,11 +418,11 @@ class Tank{
 	initCamStream(){
 		this.cam.img = getdom(`img[tankid="${this.id}"]`)[0];
 		this.cam.stream.init({bufferSize:4096*10}); // [!] If the recv buffer is too small, the packets are silently dropped [!]
-		this.cam.img.style.display = 'block';
+		getdom(`.div_videofeed[tankid="${this.id}"]`)[0].style.display = 'block';
 	}
 	closeCamStream(){
 		this.cam.stream.close();
-		if (this.cam.img != null) this.cam.img.style.display = 'none';
+		if (this.cam.img != null) getdom(`.div_videofeed[tankid="${this.id}"]`)[0].style.display = 'none';
 	}
 	
 	stopComsLoops(){
@@ -739,7 +739,9 @@ function addTank(){
 			</div>
 			<div>
 				<input type="checkbox" class="check_camera" ${tank.cam.on ? "checked" : ""}>Camera feed:
-				<img width=200 style="-webkit-user-select:none;display:block;" ${tankidattr}>
+				<div class="div_videofeed resizable" ${tankidattr}>
+					<img style="width:auto; height: 100%;" ${tankidattr}>
+				</div>
 			</div>
 		</div>
 	`);
@@ -892,7 +894,6 @@ window.addEventListener("gamepaddisconnected", ev => {
 /*
 TODO:
 	. add support for multiple tanks (using different ports ?)
-	. resizable video feed
 	. add input to select speed factor for manual / auto control
 	. canvas add axes
 	. canvas support scroll / zoom

@@ -77,3 +77,11 @@ body{
 	max-height: 500px;
 	overflow-y: scroll;
 }
+
+.resizable {
+	height: 150px;
+	display: block;
+	resize: vertical;
+	overflow: hidden;
+	line-height: 0;
+}
