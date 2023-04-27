@@ -4,6 +4,7 @@ const cam_port = 8081;
 const opts_port = 8082;
 const coms_port_in = 8083;
 const coms_port_out = 8082;
+const HEARTBEAT_MAXTIME = 3000;
 
 // default dimensions of aruco grid
 const ARUCO_GRID_NBW = 8;
@@ -106,8 +107,8 @@ let pxPerM = Math.min(canvasW, canvasH) / base_size;
 
 let ctx = {main: canvas.getContext('2d'), overlay: canvas_overlay.getContext('2d')};
 for (let key in ctx){
-	ctx[key].scale(1, -1);                     // set y axis pointing up
-	ctx[key].translate(canvasW/2, -canvasH/2); // origin at center
+	//ctx[key].scale(1, -1);                  // set y axis pointing up
+	ctx[key].translate(canvasW/2, canvasH/2); // origin at center
 }
 
 let disp_grid = true;
@@ -206,7 +207,6 @@ class Loop{
 // see: developer.chrome.com/docs/extensions/reference/sockets_udp
 let udp_streams = {}; // in udp streams
 chrome.sockets.udp.onReceive.addListener( info => {
-	//console.log(`Message from socket id "${info.socketId}" @${info.remoteAddress}:${info.remotePort}`);
 	if (info.socketId in udp_streams) udp_streams[info.socketId].on_recv(info.data);
 } );
 class UDPStream{
@@ -274,10 +274,10 @@ class TCPClient{
 		this.on = false;
 		this.setAddr(addr);
 	}
-	init(on_con=noop, on_err=noop){
+	init(on_con=noop, on_err=noop, params={}){
 		if (this.on) return;
 		
-		chrome.sockets.tcp.create({}, sockinfo => {
+		chrome.sockets.tcp.create(params, sockinfo => {
 			this.sockid = sockinfo.socketId;
 			chrome.sockets.tcp.connect(this.sockid, this.addr, this.port, res => {
 				if (res < 0){
@@ -435,7 +435,7 @@ class Tank{
 	regenHeartbeatLoop(){
 		this.stopLoop(this.coms.opts.heartbeat_loop);
 		this.coms.opts.heartbeat_loop = new Loop(
-			this.sendOptsHeartbeat.bind(this), noop, ['coms', 'out_hbt'], 500, 1500, this.toggleNeterror.bind(this, true) // heartbeat every 1/2s, error if no answer after 1.5s
+			this.sendOptsHeartbeat.bind(this), noop, ['coms', 'out_hbt'], 500, HEARTBEAT_MAXTIME, this.toggleNeterror.bind(this, true) // heartbeat every 1/2s, error if no answer after 1.5s
 		).addToPool(this.loops);
 	}
 	regenComsLoops(){
@@ -446,10 +446,13 @@ class Tank{
 		this.regenComsLoops();
 		
 		this.coms.move.stream.init();
-		this.coms.opts.stream.init( ()=>{
-			this.coms.opts.heartbeat_loop.start();
-			on_con();
-		}, this.toggleNeterror.bind(this, true));
+		this.coms.opts.stream.init(
+			()=>{
+				this.coms.opts.heartbeat_loop.start();
+				on_con();
+			},
+			this.toggleNeterror.bind(this, true), {bufferSize:4096*10} // buffer needs to fit all the grid markers data
+		); 
 	}
 	closeComs(){
 		this.stopComsLoops();
@@ -490,10 +493,29 @@ class Tank{
 	}
 	
 	// receive opts response from tcp server, split into individual messages
+	// some responses can be actually be sent without having a corresponding request, those are dealt with on a case-by-case
 	getOptsResp(resp){
 		String.fromCharCode.apply( null, new Uint8Array(resp) ).split('\n\n').forEach( msg => {
-			if (msg != '') this.coms.opts.handlers.shift()(msg);
+			if (msg != ''){
+				if (msg.startsWith("SETAUTOMARKERS")) this.getOptsAutoMarkers(msg);
+				else                                  this.coms.opts.handlers.shift()(msg);
+			}
 		});
+	}
+	getOptsAutoMarkers(msg){
+		let mids = [];
+		let cornersAll = [];
+		for (let line of msg.split('\n').splice(1)){
+			if (line == "") continue;
+			
+			let [mid, corners] = line.split(';;');
+			mids.push(Number(mid));
+			cornersAll.push(corners.split(';').map( corner => corner.split(',').map(coord => Number(coord)) ));
+		}
+		
+		this.data.markers.auto.corners = cornersAll;
+		this.data.markers.auto.ids = mids;
+		drawOverlay();
 	}
 	// send opts request to tcp server
 	sendOptsReq(req, callback=noop){
@@ -501,7 +523,7 @@ class Tank{
 		this.sendData(req, this.coms.opts.stream);
 		this.coms.opts.handlers.push(callback);
 	}
-	sendOptsSET(parts, val){ // send GET request
+	sendOptsSET(parts, val){ // send SET request
 		let type = typeof val;
 		     if (type == 'boolean') this.sendOptsReq(`SET\n${parts.join(',')};${val ? '1' : '0'}\n\n`);
 		else if (type == 'number')  this.sendOptsReq(`SET\n${parts.join(',')};${val}\n\n`);
@@ -511,7 +533,7 @@ class Tank{
 		obj_set(this.data, parts, val);
 		this.dispmsg(`"${parts}" set to "${val}"`);
 	}
-	sendOptsGET(parts){ // send SET request
+	sendOptsGET(parts){ // send GET request
 		this.sendOptsReq(`GET\n${parts.join(',')}\n\n`, this.parseData);
 	}
 	sendOptsHeartbeat(rec){
@@ -579,7 +601,7 @@ class Tank{
 		this.initComs(()=>{
 			// set values
 			getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).slice(1).forEach(el => el.click()); // all buttons except first [!] should be tank addr input [!]
-			getdom(`.div_tank[tankid="${this.id}"] .div_radiozone input[checked]`).forEach(el => el.click());
+			getdom(`.div_tank[tankid="${this.id}"] .div_radiozone input:checked`).forEach(el => el.dispatchEvent(new Event("change")));
 		});
 		
 	}
@@ -639,9 +661,9 @@ class Tank{
 				ids.push(n);
 				n += 1;
 				
-				let yt = s*j + cm       ; let yb = s*j + cm+cs;
+				let yt = s*j + cm   ; let yb = s*j + cm+cs;
 				let xr = s*i + cm+cs; let xl = s*i + cm;
-				corners.push([ [xl,yt,0], [xl,yb,0], [xr,yb,0], [xr,yt,0] ]) // top left corner first, CCW order
+				corners.push([ [xl,yt,0], [xr,yt,0], [xr,yb,0], [xl,yb,0] ]) // top left corner first, CW order
 			}
 		}
 		
@@ -655,8 +677,8 @@ class Tank{
 	draw(){
 		ctx.main.save();
 		ctx.main.fillStyle = this.color;
-		ctx.main.translate(this.data.move.real.pos[0]*pxPerM, this.data.move.real.pos[1]*pxPerM);
-		ctx.main.rotate(-Math.atan2(this.data.move.real.dir[1], this.data.move.real.dir[0]));
+		ctx.main.translate(this.data.move.real.pos[0]*pxPerM, this.data.move.real.pos[1]*pxPerM); // flip y coord
+		ctx.main.rotate(Math.PI/2 - Math.atan2(this.data.move.real.dir[1], this.data.move.real.dir[0]));
 		ctx.main.fill(this.path);
 		ctx.main.restore();
 	}
@@ -819,13 +841,9 @@ function drawOverlay(){
 	
 	// draw targets
 	for (let tank of tanks){
-		ctx.overlay.save();
-		ctx.overlay.translate(tank.data.move.auto.target[0]*pxPerM, tank.data.move.auto.target[1]*pxPerM);
-		ctx.overlay.scale(1,-1);
 		let imgw = tank.pickerImg.width; 
 		let imgh = tank.pickerImg.height; 
-		ctx.overlay.drawImage(tank.pickerImg, 0, -imgh, imgw, imgh);
-		ctx.overlay.restore(); 
+		ctx.overlay.drawImage(tank.pickerImg, tank.data.move.auto.target[0]*pxPerM, tank.data.move.auto.target[1]*pxPerM - imgh);
 	}
 }
 
@@ -845,7 +863,8 @@ canvas_overlay.addEventListener("click", ev => {
 		ev.preventDefault();
 		
 		let invMat = ctx.overlay.getTransform().inverse();
-		let [x, y] = [ ev.pageX - canvas.getBoundingClientRect().left, ev.pageY - canvas.getBoundingClientRect().top ];
+		let canvasRect = canvas.getBoundingClientRect();
+		let [x, y] = [ ev.pageX - canvasRect.left, ev.pageY - canvasRect.top ];
 		x = (x * invMat.a + y * invMat.c + invMat.e)/pxPerM;
 		y = (y * invMat.b + y * invMat.d + invMat.f)/pxPerM;
 		
@@ -872,6 +891,7 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
+	. add support for multiple tanks (using different ports ?)
 	. resizable video feed
 	. add input to select speed factor for manual / auto control
 	. canvas add axes
