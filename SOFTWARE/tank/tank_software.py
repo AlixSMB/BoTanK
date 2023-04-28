@@ -6,15 +6,15 @@ from positioning import getBoardTransform, auto_make_board # positioning.py
 import cv2
 from cv2 import aruco
 import numpy as np
-#from adafruit_motorkit import MotorKit
-#kit = MotorKit()
-kit = Object(motor1=Object(throttle=0), motor2=Object(throttle=0))
+from adafruit_motorkit import MotorKit
+kit = MotorKit()
+#kit = Object(motor1=Object(throttle=0), motor2=Object(throttle=0))
 import math
 import time
 import pickle
 
 # load camera data
-CAMERADATA_FILENAME = "laptopcam_fisheye_params_2"
+CAMERADATA_FILENAME = "jetbot_fisheye_params_1" 
 print(f"Reading camera calibration params from \"{CAMERADATA_FILENAME}\"")
 with open(CAMERADATA_FILENAME, "rb") as filecamera : cameradata = pickle.load(filecamera)
 
@@ -41,14 +41,14 @@ GST_STRING = \
 	)
 #cap = cv2.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) #VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) # from util.py [!]
 cap = cv2.VideoCapture(0)
-
-cap.set(cv2.CAP_PROP_EXPOSURE, -4) # set to 0.25 auto-adjust
+#cap.set(cv2.CAP_PROP_EXPOSURE, -4) # set to 0.25 auto-adjust
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 10000);
+
 print(f"Video res.: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
 print(f"Video FPS: {cap.get(cv2.CAP_PROP_FPS)}")
 #print(f"Video exposure: {cap.get(cv2.CAP_PROP_EXPOSURE)}")
 
-ADDR_CTRLPANEL = "127.0.0.1"
+ADDR_CTRLPANEL = "192.168.43.75"
 print(f"Control panel IP set to {ADDR_CTRLPANEL}")
 PORT_CAM = 8081
 PORT_OPTS = 8082
@@ -102,7 +102,10 @@ def recv_setdata(lines):
 			else              : obj.onchange(vals)
 def recv_move_data(server):
 	msg = server.recv()
-	if msg is not None : recv_setdata(msg.decode('ascii').split('\n'))
+	while msg is not None:
+	#if msg is not None:
+		recv_setdata(msg.decode('ascii').split('\n'))
+		msg = server.recv()
 def recv_opts_data(server):
 	msg = server.recv()
 	if msg is None : return
@@ -223,6 +226,23 @@ def set_move_vel(vel):
 	data['move']['real']['vel'].val = vel
 	kit.motor1.throttle = 0.9 if vel[0] > 0.9 else (-0.9 if vel[0] < -0.9 else vel[0]) 
 	kit.motor2.throttle = 0.9 if vel[1] > 0.9 else (-0.9 if vel[1] < -0.9 else vel[1])
+def auto_move():
+	target = data['move']['auto']['target'].val
+	pos = data['move']['real']['pos'].val
+	tankdir = data['move']['real']['dir'].val
+	speed = data['move']['auto']['speed'].val
+	
+	dirTarget = [ target[0]-pos[0], target[1]-pos[1] ]
+	dirTargetNorm = math.sqrt(dirTarget[0]**2 + dirTarget[1]**2)
+	dirTarget[0] /= dirTargetNorm
+	dirTarget[1] /= dirTargetNorm
+	# tankdir is already normalized
+	
+	angle = math.pi/2 - math.acos(tankdir[0]*dirTarget[0] + tankdir[1]*dirTarget[1])
+	vel = [math.cos(angle), math.sin(angle)]
+	
+	if angle >= -math.pi/2 and angle <= math.pi/2 : set_move_vel([speed, vel[1]*speed])
+	else                                          : set_move_vel([vel[1]*speed, dist*speed])
 
 def newAutoBoard():
 	return Object(
@@ -246,7 +266,7 @@ data = {
 		'auto': { # automatic mode
 			'on': Object(val=False, onchange=toggle_move_auto),
 			'target': Object(val=[0,0], onchange=update_data),
-			'speed': Object(val=0.5, onchange=update_data) 
+			'speed': Object(val=0.3, onchange=update_data) 
 		}
 	},
 	'cannon': {
@@ -274,24 +294,6 @@ timeouts = {
 	'check_movedata': Timeout(1, partial(data['move']['com']['vel'].onchange, [0,0], True)) # set vel to 0 if we don't receive move data for extended amount of time and move is set to manual
 }
 if not data['move']['auto']['on'] : timeouts['check_movedata'].enable()
-
-def auto_move():
-	target = data['move']['auto']['target'].val
-	pos = data['move']['real']['pos'].val
-	tankdir = data['move']['real']['dir'].val
-	speed = data['move']['auto']['speed'].val
-	
-	dirTarget = [ target[0]-pos[0], target[1]-pos[1] ]
-	dirTargetNorm = math.sqrt(dirTarget[0]**2 + dirTarget[1]**2)
-	dirTarget[0] /= dirTargetNorm
-	dirTarget[1] /= dirTargetNorm
-	# tankdir is already normalized
-	
-	angle = math.pi/2 - math.acos(tankdir[0]*dirTarget[0] + tankdir[1]*dirTarget[1])
-	vel = [math.cos(angle), math.sin(angle)]
-	
-	if angle >= -math.pi/2 and angle <= math.pi/2 : set_move_vel([speed, vel[1]*speed])
-	else                                          : set_move_vel([vel[1]*speed, dist*speed])
 
 set_timer('stream_imgframe', 1/20) # 20 fps
 set_timer('movedata', 1/10) # 10 fps

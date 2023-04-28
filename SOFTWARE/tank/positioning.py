@@ -7,8 +7,9 @@ import cv2.aruco as aruco
 import math
 
 detect_params = aruco.DetectorParameters_create()
-estimate_param = aruco.EstimateParameters.create()
-estimate_param.pattern = aruco.CW_top_left_corner
+#detect_params.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
+#estimate_param = aruco.EstimateParameters.create()
+#estimate_param.pattern = aruco.CW_top_left_corner
 
 def update_marker_refs(m_obj, marker_i, local_corners, isGlobalOrig): # called when marker gets positioned relative to a new origin marker
 	for refmarker_id in marker_i.in_refs: # update markers whose position is based on this one's
@@ -34,8 +35,8 @@ def auto_make_board(cameradata, videoframe, m_obj, ms, dictio):
 	corners, ids, rejectedCorners = aruco.detectMarkers(videoframe, dictio, parameters=detect_params)
 	if ids is not None and len(ids) > 1:
 		
-		rvecs, tvecs, objpoints = aruco.estimatePoseSingleMarkers(corners, ms, cameradata['matrix'], cameradata['coeffs'], estimateParameters=estimate_param)
-		local_corners = np.array([[0,0,0,1],[ms,0,0,1],[ms,ms,0,1],[0,ms,0,1]], dtype=np.float32) # CW order [x,y,z,1]*4
+		rvecs, tvecs, objpoints = aruco.estimatePoseSingleMarkers(corners, ms, cameradata['matrix'], cameradata['coeffs'])#, estimateParameters=estimate_param)
+		local_corners = np.array([[-ms/2,ms/2,0,1],[ms/2,ms/2,0,1],[ms/2,-ms/2,0,1],[-ms/2,-ms/2,0,1]], dtype=np.float32) # CW center order [x,y,z,1]*4
 		#local_corners = np.array([[0,0,0,1],[0,ms,0,1],[ms,ms,0,1],[ms,0,0,1]], dtype=np.float32) # CCW order [x,y,z,1]*4
 		
 		for mid in ids[:,0]:
@@ -53,8 +54,8 @@ def auto_make_board(cameradata, videoframe, m_obj, ms, dictio):
 			orig_id = np.min(ids)
 			orig_ref = m_obj.cells_i[orig_id].out_ref
 			if orig_ref is not None:
-				orig_id = orig_ref
 				orig_invTransfo = np.matmul(m_obj.cells_i[orig_id].transitionMat, getInvTransformationMatrix(rvecs[orig_ind], tvecs[orig_ind]))
+				orig_id = orig_ref
 			else:
 				orig_invTransfo = getInvTransformationMatrix(rvecs[orig_ind], tvecs[orig_ind])
 				if orig_id < m_obj.orig: # update board global origin marker
@@ -127,8 +128,9 @@ def getBoardTransform(cameradata, videoframe, board, dictio, transfo=None):
 		nb_markers, rvec, tvec = aruco.estimatePoseBoard(corners, ids, board, cameradata['matrix'], cameradata['coeffs'], None, None)
 		
 		if nb_markers > 0:
-			aruco.drawDetectedMarkers(videoframe, corners, ids)
-			cv2.drawFrameAxes(videoframe, cameradata['matrix'], cameradata['coeffs'], rvec, tvec, 0.7)
+			# laggy as hell somehow ...
+			#aruco.drawDetectedMarkers(videoframe, corners, ids)
+			#cv2.drawFrameAxes(videoframe, cameradata['matrix'], cameradata['coeffs'], rvec, tvec, 0.7)
 			
 			invTransfo = getInvTransformationMatrix(rvec, tvec)
 			

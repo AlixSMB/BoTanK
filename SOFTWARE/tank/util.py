@@ -68,12 +68,12 @@ def getChessBoardCorners(nb_w, nb_h, cell_s):
 	# bottom right corners of black and white cells, starts at top left cell, goes right then down
 	return [ [cell_s*i, cell_s*j, 0] for j in range(1,nb_h) for i in range(1,nb_w) ]
 # returns ids , 4 corners of each marker
-def getGridMarkers(nb_w, nb_h, cell_s, cell_m):
+def getGridMarkers(nb_w, nb_h, cell_s, cell_m, startId=0):
 	ids = []
 	corners = []
 	
 	s = cell_s + cell_m*2 # total square size
-	n=0
+	n=startId
 	for i in range(nb_w):
 		for j in range(nb_h):
 			
