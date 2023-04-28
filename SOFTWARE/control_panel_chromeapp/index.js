@@ -9,7 +9,7 @@ const HEARTBEAT_MAXTIME = 3000;
 // default dimensions of aruco grid
 const ARUCO_GRID_NBW = 8;
 const ARUCO_GRID_NBH = 5;
-const ARUCO_GRID_CSIZE = 0.014; // cell size in meters
+const ARUCO_GRID_CSIZE = 0.0366; // cell size in meters
 const ARUCO_GRID_CMARGIN = ARUCO_GRID_CSIZE;
 
 let getdom = (str, el=document) => [...el.querySelectorAll(str)];
@@ -919,6 +919,7 @@ window.addEventListener("gamepaddisconnected", ev => {
 /*
 TODO:
 	. add ability to delete specific markers from auto board
+	. add press X on gamepad to take auto board snap
 	. add support for multiple tanks (using different ports ?)
 	. add input to select speed factor for manual / auto control
 	. canvas add axes
