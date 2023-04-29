@@ -767,11 +767,16 @@ class Tank{
 		ctx.main.fillStyle = this.color;
 		
 		if (tank_centered && tank_centerid == this.id){
-			setCanvasTransform(this.data.move.real.pos[0]*pxPerM, this.data.move.real.pos[1]*pxPerM, this.data.move.real.dir[0], this.data.move.real.dir[1]);
-			ctx.main.save();
-			ctx.main.scale(pxPerM, pxPerM);
-			ctx.main.fill(this.path);
-			ctx.restore();
+			ctx.main.setTransform(
+				this.data.move.real.dir[0], this.data.move.real.dir[1], -this.data.move.real.dir[1], this.data.move.real.dir[0],
+				canvasW/2, canvasH/2
+			);
+			ctx.main.scale(pxPerM, pxPerM); 
+			ctx.main.fill(this.path); // draw tank in center, rotated
+			
+			// everything else relative to tank	
+			setCanvasTransform( (-this.data.move.real.pos[0])*pxPerM, (-this.data.move.real.pos[1])*pxPerM, 1,0 );
+			
 			drawOverlay(); // have to redraw overlay everytime in this situation
 		}
 		else{
@@ -932,6 +937,8 @@ function addTank(){
 		tank.data.markers.disp_ids = this.checked;
 		drawOverlay();
 	});
+	getdom('.btn_startAutoMove', tankdiv)[0].addEventListener('click', ()=> tank.sendOptsDO('STARTMOVEAUTO', '"Start auto. movement"'));
+	getdom('.btn_stopAutoMove', tankdiv)[0].addEventListener('click', ()=> tank.sendOptsDO('STOPMOVEAUTO', '"Stop auto. movement"'));
 }
 
 let pospicker_tank = null;
@@ -1046,9 +1053,13 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
-	. add slider for canvas zoom, slider for x pos, slider for y pos, slider for canvas rotation, checkbutton for centered on tank
 	. add ability to delete specific markers from auto board
 	. add cannon behavior
+	
+	. aruco coded obstacles:
+		- boxes, one marker per vertical face -> forms a board
+		- range of ids are declared in use for obstacles, another range for map positioning
+		- boxes can be registered: like auto_board
 
 	. add code for obstacles
 	. add ability to manually add obstacles
@@ -1056,6 +1067,5 @@ TODO:
 	
 	. add support for multiple tanks (using different ports ?)
 	. canvas add axes
-	. canvas support scroll / zoom
 	. use input type number
 */
