@@ -6,15 +6,15 @@ from positioning import getBoardTransform, auto_make_board # positioning.py
 import cv2
 from cv2 import aruco
 import numpy as np
-from adafruit_motorkit import MotorKit
-kit = MotorKit()
-#kit = Object(motor1=Object(throttle=0), motor2=Object(throttle=0))
+#from adafruit_motorkit import MotorKit
+#kit = MotorKit()
+kit = Object(motor1=Object(throttle=0), motor2=Object(throttle=0))
 import math
 import time
 import pickle
 
 # load camera data
-CAMERADATA_FILENAME = "jetbot_fisheye_params_1" 
+CAMERADATA_FILENAME = "laptopcam_fisheye_params_2" 
 print(f"Reading camera calibration params from \"{CAMERADATA_FILENAME}\"")
 with open(CAMERADATA_FILENAME, "rb") as filecamera : cameradata = pickle.load(filecamera)
 
@@ -48,7 +48,7 @@ print(f"Video res.: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FR
 print(f"Video FPS: {cap.get(cv2.CAP_PROP_FPS)}")
 #print(f"Video exposure: {cap.get(cv2.CAP_PROP_EXPOSURE)}")
 
-ADDR_CTRLPANEL = "192.168.43.75"
+ADDR_CTRLPANEL = "127.0.0.1"#"192.168.43.75"
 print(f"Control panel IP set to {ADDR_CTRLPANEL}")
 PORT_CAM = 8081
 PORT_OPTS = 8082
