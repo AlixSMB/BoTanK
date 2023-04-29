@@ -17,7 +17,9 @@ def update_marker_refs(m_obj, marker_i, local_corners, isGlobalOrig): # called w
 		
 		# position "refmarker" relative to new ref of "marker"
 		refmarker_i.transitionMat = np.matmul(marker_i.transitionMat, refmarker_i.transitionMat)
-		for n in range(4) : m_obj.cells_tmp[refmarker_id][n] = np.matmul(refmarker_i.transitionMat, local_corners[n])[:3]
+		for n in range(4):
+			m_obj.cells_tmp[refmarker_id][n] = np.matmul(refmarker_i.transitionMat, local_corners[n])[:3]
+			m_obj.cells_tmp[refmarker_id][n][1] *= -1 # flip y axis
 		if isGlobalOrig : m_obj.cells[refmarker_id] = m_obj.cells_tmp[refmarker_id].copy()
 		
 		# move refmarker from previous refs list to new one
@@ -76,7 +78,9 @@ def auto_make_board(cameradata, videoframe, m_obj, ms, dictio):
 				
 				marker_i.transitionMat = np.matmul(orig_invTransfo, getTransformationMatrix(mrvec, mtvec))
 				# express points from local coords system to orig marker coords system
-				for n in range(4) : m_obj.cells_tmp[mid][n] = np.matmul(marker_i.transitionMat, local_corners[n])[:3]
+				for n in range(4):
+					m_obj.cells_tmp[mid][n] = np.matmul(marker_i.transitionMat, local_corners[n])[:3]
+					m_obj.cells_tmp[mid][n][1] *= -1 # flip y
 				if m_obj.orig == orig_id : m_obj.cells[mid] = m_obj.cells_tmp[mid].copy()
 				
 				orig_refs.append(mid)
@@ -128,7 +132,7 @@ def getBoardTransform(cameradata, videoframe, board, dictio, transfo=None):
 		nb_markers, rvec, tvec = aruco.estimatePoseBoard(corners, ids, board, cameradata['matrix'], cameradata['coeffs'], None, None)
 		
 		if nb_markers > 0:
-			# laggy as hell somehow ...
+			# laggy as hell in some situations ...
 			#aruco.drawDetectedMarkers(videoframe, corners, ids)
 			#cv2.drawFrameAxes(videoframe, cameradata['matrix'], cameradata['coeffs'], rvec, tvec, 0.7)
 			

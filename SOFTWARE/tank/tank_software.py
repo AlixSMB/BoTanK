@@ -260,7 +260,7 @@ data = {
 		},
 		'real': { # actual value
 			'pos': Object(val=[0,0]),
-			'dir': Object(val=[0,0]),
+			'dir': Object(val=[1,0]), # 0°
 			'vel': Object(val=[0,0])
 		},
 		'auto': { # automatic mode
