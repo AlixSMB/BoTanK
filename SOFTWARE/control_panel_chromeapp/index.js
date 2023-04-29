@@ -126,21 +126,28 @@ function dispmsgGamepad(ind, msg){
 
 let canvas = getdom('#canvas_main')[0]; // main canvas
 let canvas_overlay = getdom('#canvas_overlay')[0]; // common overlay canvas
+let ctx = {main: canvas.getContext('2d'), overlay: canvas_overlay.getContext('2d')};
 let canvasW = canvas.width; let canvasH = canvas.height;
-
 let base_size = 1; // canavs size in meters
 let pxPerM = Math.min(canvasW, canvasH) / base_size;
 
-let ctx = {main: canvas.getContext('2d'), overlay: canvas_overlay.getContext('2d')};
-for (let key in ctx){
-	//ctx[key].scale(1, -1);                  // set y axis pointing up
-	ctx[key].translate(canvasW/2, canvasH/2); // origin at center
+function setCanvasTransform(x, y, rotx, roty){
+	for (let key in ctx){
+		ctx[key].setTransform(1,0,0,1, canvasW/2+x, canvasH/2+y); // origin at center at first
+		ctx[key].transform(rotx, roty, -roty, rotx, 0,0);
+	}
 }
+setCanvasTransform(0,0,1,0);
 
 let disp_grid = true;
 let grid_from = 0;
-
-// add to html
+let tank_centered = false;
+let tank_centerid = 0;
+let origX = 0;
+let origY = 0;
+let origRot = 0;
+// added to html
+// grid display
 getdom("#div_canvas")[0].style.height = `${canvasH}px`;
 let div_map = getdom("#div_map")[0];
 div_map.insertAdjacentHTML('beforeend', `
@@ -151,10 +158,31 @@ getdom('#check_dispgrid', div_map)[0].addEventListener('change', function(){
 	disp_grid = this.checked;
 	drawOverlay();
 });
-set_inputzone_callback(div_map);
 set_inputzonebtns_callbacks(
 	nodes =>{ grid_from = nodes[0].value; drawOverlay(); }
 , 1, div_map, '.input_gridfrom');
+// origin pos, zoom, rotation, tank centered
+div_map.insertAdjacentHTML('afterBegin', `
+	Origin X: ${html_sliderboxzone(-5, 5, origX ,'origx', 'size=2')}
+	Origin Y: ${html_sliderboxzone(-5, 5, origY ,'origy', 'size=2')}
+	<br>Rotation: ${html_sliderboxzone(0, 2*Math.PI, origRot ,'origrot', 'size=2')}
+	<br>px/m:  ${html_sliderboxzone(10, 1000, pxPerM ,'scale', 'size=2')}
+	<br><input type="checkbox" id="check_tankcentered" ${tank_centered ? "checked" : ""}>Centered on tank n°${html_inputzone(1, 'input_tankcentered', [tank_centerid], ["size=2"])}<br><br>
+`);
+function setStaticCanvas(){
+	setCanvasTransform(origX*pxPerM, origY*pxPerM, Math.cos(origRot), Math.sin(origRot));
+	drawOverlay();
+}
+getdom('#check_tankcentered', div_map)[0].addEventListener('change', function(){ 
+	tank_centered = this.checked;
+	if (!this.checked) setStaticCanvas();
+});
+set_sliderbox_callback(div_map, 'origx',   value =>{ origX = Number(value);   setStaticCanvas(); });
+set_sliderbox_callback(div_map, 'origy',   value =>{ origY = Number(value);   setStaticCanvas(); });
+set_sliderbox_callback(div_map, 'origrot', value =>{ origRot = Number(value); setStaticCanvas(); });
+set_sliderbox_callback(div_map, 'scale',   value =>{ pxPerM = Number(value);  setStaticCanvas(); });
+set_inputzonebtns_callbacks(nodes => tank_centerid = nodes[0].value, 1, div_map, '.input_tankcentered');
+set_inputzone_callback(div_map);
 
 // [!] loops should be deleted/re-created after being stopped [!]
 class Loop{
@@ -355,7 +383,7 @@ class Tank{
 				},
 				real: { // actual value
 					pos: [0, 0], 
-					dir: [0, 0],
+					dir: [1, 0], // 0°
 					vel: [0, 0]
 				},
 				auto: { // automatic mode
@@ -377,6 +405,8 @@ class Tank{
 			},
 			markers: {
 				type: 'auto',
+				
+				disp_ids: false,
 				
 				auto_s: 0.035,
 				auto: {
@@ -431,12 +461,13 @@ class Tank{
 		this.gamepad.btn_clicks[GAMEPAD_Y_BTN] = false;
 		this.gamepad.btn_clicks[GAMEPAD_X_BTN] = false;
 		
+		// tank icon, tip is at 0,0 (camera position)
 		this.color = color === null ? Tank.colors[ Tank.colors.length % (this.id+1) ] : color;
 		this.path = new Path2D();
-		let base = 0.07*pxPerM; let height = 0.1*pxPerM; // in m
-		this.path.moveTo(-base/2,0);
-		this.path.lineTo(base/2, 0);
-		this.path.lineTo(0, height);
+		let base = 0.07; let height = 0.1; // in m
+		this.path.moveTo(-height, -base/2);
+		this.path.lineTo(-height, base/2);
+		this.path.lineTo(0, 0);
 		this.path.closePath();
 		
 		this.pickerUrl = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" height="24" width="24"><path style="fill:${this.color};" d="M5 21V4h9l.4 2H20v10h-7l-.4-2H7v7Zm7.5-11Zm2.15 4H18V8h-5.25l-.4-2H7v6h7.25Z"/></svg>`;
@@ -733,12 +764,24 @@ class Tank{
 	}
 	
 	draw(){
-		ctx.main.save();
 		ctx.main.fillStyle = this.color;
-		ctx.main.translate(this.data.move.real.pos[0]*pxPerM, this.data.move.real.pos[1]*pxPerM); // flip y coord
-		ctx.main.rotate(Math.PI/2 - Math.atan2(this.data.move.real.dir[1], this.data.move.real.dir[0]));
-		ctx.main.fill(this.path);
-		ctx.main.restore();
+		
+		if (tank_centered && tank_centerid == this.id){
+			setCanvasTransform(this.data.move.real.pos[0]*pxPerM, this.data.move.real.pos[1]*pxPerM, this.data.move.real.dir[0], this.data.move.real.dir[1]);
+			ctx.main.save();
+			ctx.main.scale(pxPerM, pxPerM);
+			ctx.main.fill(this.path);
+			ctx.restore();
+			drawOverlay(); // have to redraw overlay everytime in this situation
+		}
+		else{
+			ctx.main.save();
+			ctx.main.translate(this.data.move.real.pos[0]*pxPerM, this.data.move.real.pos[1]*pxPerM); // flip y coord
+			ctx.main.rotate(Math.atan2(this.data.move.real.dir[1], this.data.move.real.dir[0]));
+			ctx.main.scale(pxPerM, pxPerM);
+			ctx.main.fill(this.path);
+			ctx.main.restore();
+		}
 	}
 	
 	dispmsg(msg){
@@ -788,6 +831,7 @@ function addTank(){
 				<summary>Markers</summary>
 				Type: ${html_radiozone("radio_boardtype", ["grid", "auto"], tank.data.markers.type == 'auto' ? 1 : 0, tankidattr)}
 				<div class="markers_params_container">
+					<input type="checkbox" class="check_displayids" ${tank.data.markers.disp_ids ? "checked" : ""}>Display IDs<br>
 					<div class="markers_params grid_params" ${tankidattr} style="display:${tank.data.markers.type == 'grid' ? 'inline' : 'none'}">
 						Nb. W: ${html_inputzone(
 							4, 'input_gridparams',
@@ -884,6 +928,10 @@ function addTank(){
 	getdom('.btn_addmarkers', tankdiv)[0].addEventListener('click', ()=> tank.snapAutoMarker());
 	getdom('.btn_resetmarkers', tankdiv)[0].addEventListener('click', ()=> tank.sendOptsDO('RESETAUTOBOARD', '"Reset auto markers"'));
 	getdom('.check_manualmovedir', tankdiv)[0].addEventListener('change', function(){ tank.gamepad.dir = this.checked ? -1 : 1; });
+	getdom('.check_displayids', tankdiv)[0].addEventListener('change', function(){ 
+		tank.data.markers.disp_ids = this.checked;
+		drawOverlay();
+	});
 }
 
 let pospicker_tank = null;
@@ -907,26 +955,38 @@ function unlatch_targetpospicker(){
 	drawOverlay();
 }
 function drawOverlay(){
-	ctx.overlay.clearRect(-canvasW/2, -canvasH/2, canvasW, canvasH);
+	ctx.overlay.save();
+	ctx.overlay.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.overlay.clearRect(0, 0, canvasW, canvasH);
+	ctx.overlay.restore();
 	
 	// draw grid
 	if (disp_grid){
-		let type = tanks[grid_from].data.markers.type;
-		let corners = tanks[grid_from].data.markers[type].corners;
-		let ids = tanks[grid_from].data.markers[type].ids;
-		let color = tanks[grid_from].color;
+		let tank = tanks[grid_from];
+		let type = tank.data.markers.type;
+		let corners = tank.data.markers[type].corners;
+		let ids = tank.data.markers[type].ids;
 		for (let i=0; i<ids.length; i++){
+			
+			let [x1,y1] = [Math.round(corners[i][0][0]*pxPerM), Math.round(corners[i][0][1]*pxPerM)];
+			let [x2,y2] = [Math.round(corners[i][1][0]*pxPerM), Math.round(corners[i][1][1]*pxPerM)];
+			let [x3,y3] = [Math.round(corners[i][2][0]*pxPerM), Math.round(corners[i][2][1]*pxPerM)];
+			let [x4,y4] = [Math.round(corners[i][3][0]*pxPerM), Math.round(corners[i][3][1]*pxPerM)];
 			
 			ctx.overlay.beginPath();
 			ctx.overlay.lineWidth = 2;
-			ctx.overlay.strokeStyle = 'black';
-			ctx.overlay.moveTo(corners[i][0][0]*pxPerM, corners[i][0][1]*pxPerM);
-			ctx.overlay.lineTo(corners[i][1][0]*pxPerM, corners[i][1][1]*pxPerM);
-			ctx.overlay.lineTo(corners[i][2][0]*pxPerM, corners[i][2][1]*pxPerM);
-			ctx.overlay.lineTo(corners[i][3][0]*pxPerM, corners[i][3][1]*pxPerM);
+			ctx.overlay.strokeStyle = tank.color;
+			ctx.overlay.moveTo(x1, y1);
+			ctx.overlay.lineTo(x2, y2);
+			ctx.overlay.lineTo(x3, y3);
+			ctx.overlay.lineTo(x4, y4);
 			ctx.overlay.closePath();
 			ctx.overlay.stroke();
 			
+			if (tank.data.markers.disp_ids){
+				ctx.overlay.font = `${Math.max(9,Math.round(Math.min(Math.abs(x2-x1), Math.abs(y4-y1))))}px sans serif`;
+				ctx.overlay.fillText(ids[i], x4+3, Math.round((y4+y1)/2)+5);
+			}
 		}
 	}
 	
@@ -941,7 +1001,11 @@ function drawOverlay(){
 
 let fps = 20;
 window.setInterval(() => {
-	ctx.main.clearRect(-canvasW/2, -canvasH/2, canvasW, canvasH);
+	ctx.main.save();
+	ctx.main.setTransform(1, 0, 0, 1, 0, 0);
+	ctx.main.clearRect(0, 0, canvasW, canvasH);
+	ctx.main.restore();
+	
 	tanks.forEach( tank => tank.draw() );
 	
 }, 1000/fps)
@@ -982,7 +1046,6 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
-	. display markers ids
 	. add slider for canvas zoom, slider for x pos, slider for y pos, slider for canvas rotation, checkbutton for centered on tank
 	. add ability to delete specific markers from auto board
 	. add cannon behavior
