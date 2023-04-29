@@ -160,6 +160,14 @@ def recv_opts_data(server):
 				reset_auto_board()
 				server.send(b'OK\n\n')
 			
+			elif lines[1] == 'STARTMOVEAUTO':
+				startMoveAuto()
+				server.send(b'OK\n\n')
+			
+			elif lines[1] == 'STOPMOVEAUTO':
+				stopMoveAuto()
+				server.send(b'OK\n\n')
+			
 			else :
 				console.log(f"Received unknown \"DO\" request \"{lines[0]}\"")
 				server.send(b'ERR\n\n')	
@@ -195,7 +203,9 @@ def update_move_vel(self, vel, fromprog=False):
 		if not fromprog : timeouts['check_movedata'].refresh()
 def toggle_move_auto(self, on):
 	if on : timeouts['check_movedata'].disable()
-	else  : timeouts['check_movedata'].enable()
+	else :
+		stopMoveAuto()
+		timeouts['check_movedata'].enable()
 	
 	kit.motor1.throttle = 0
 	kit.motor2.throttle = 0
@@ -226,7 +236,14 @@ def set_move_vel(vel):
 	data['move']['real']['vel'].val = vel
 	kit.motor1.throttle = 0.9 if vel[0] > 0.9 else (-0.9 if vel[0] < -0.9 else vel[0]) 
 	kit.motor2.throttle = 0.9 if vel[1] > 0.9 else (-0.9 if vel[1] < -0.9 else vel[1])
+def startMoveAuto():
+	if data['move']['auto']['on'].val : data['move']['auto']['run'] = True
+def stopMoveAuto():
+	data['move']['auto']['run'] = False
+	set_move_vel([0,0])
 def auto_move():
+	if not data['move']['auto']['run'] : return
+	
 	target = data['move']['auto']['target'].val
 	pos = data['move']['real']['pos'].val
 	tankdir = data['move']['real']['dir'].val
@@ -265,6 +282,7 @@ data = {
 		},
 		'auto': { # automatic mode
 			'on': Object(val=False, onchange=toggle_move_auto),
+			'run': False,
 			'target': Object(val=[0,0], onchange=update_data),
 			'speed': Object(val=0.3, onchange=update_data) 
 		}
@@ -293,7 +311,7 @@ data = {
 timeouts = {
 	'check_movedata': Timeout(1, partial(data['move']['com']['vel'].onchange, [0,0], True)) # set vel to 0 if we don't receive move data for extended amount of time and move is set to manual
 }
-if not data['move']['auto']['on'] : timeouts['check_movedata'].enable()
+if not data['move']['auto']['on'].val : timeouts['check_movedata'].enable()
 
 set_timer('stream_imgframe', 1/20) # 20 fps
 set_timer('movedata', 1/10) # 10 fps
