@@ -12,6 +12,15 @@ const ARUCO_GRID_NBH = 5;
 const ARUCO_GRID_CSIZE = 0.0366; // cell size in meters
 const ARUCO_GRID_CMARGIN = ARUCO_GRID_CSIZE;
 
+// default speeds
+const DEFAULT_MOVEAUTO_SPEED = 0.3;
+const DEFAULT_MOVEMANUAL_SPEED = 0.3;
+
+// gamepad constant
+const GAMEPAD_REFRESH_RATE = 1000/10;
+const GAMEPAD_Y_BTN = 3;
+const GAMEPAD_X_BTN = 2;
+
 let getdom = (str, el=document) => [...el.querySelectorAll(str)];
 let uniqueid_gen = function(){
 	let tmp = -1;
@@ -37,7 +46,7 @@ function setNodesVals(nodes, vals){ nodes.forEach((node,ind) => {
 	node.value = vals[ind];
 	node.setAttribute('oldvalue', vals[ind]);
 }); }
-let html_inputzone = (n=1, classes="", values=null, attrs=null, sep="<b>;</b>") => {
+let html_inputzone = (n=1, classes="", values=null, attrs=null, sep="<b> ; </b>") => {
 	let inputs = [...Array(n).keys()].map(ind => 
 		`<input 
 			type="text" 
@@ -92,6 +101,23 @@ function set_radiozone_callbacks(on_click, tankdiv, radioname){
 }
 function update_radiozone(nodezone){ nodezone.setAttribute( 'oldvalue', getdom('input[checked]', nodezone)[0].value ); }
 function revert_radiozone(nodezone){ getdom(`input`, nodezone).find(node => node.value == nodezone.getAttribute('oldvalue')).checked = true; }
+
+let html_sliderboxzone = (min, max, val, name, boxattrs='') => `
+	${html_inputzone(1,'input_'+name,[val],[boxattrs])}
+	<input type="range" class="slider_${name}" min="${min}" max="${max}" value="${val}" step="${(max-min)/100}">
+`;
+function set_sliderbox_callback(el, name, callback){
+	let slider = getdom('.slider_'+name, el)[0];
+	let box = getdom('.input_'+name, el)[0];
+	
+	set_inputzonebtns_callbacks(nodes =>{
+		slider.value = nodes[0].value;
+		callback(nodes[0].value);
+	}, 1, el, '.input_'+name);
+	
+	slider.addEventListener('input', function(){ box.value = this.value; });
+	slider.addEventListener('change', function(){ callback(this.value); });
+}
 
 let msgconsole = getdom('#div_msg')[0];
 function dispmsgGamepad(ind, msg){
@@ -334,7 +360,8 @@ class Tank{
 				},
 				auto: { // automatic mode
 					on: false,
-					target: [0, 0]
+					target: [0, 0],
+					speed: DEFAULT_MOVEAUTO_SPEED
 				}
 			},
 			cannon: {
@@ -394,8 +421,15 @@ class Tank{
 		this.gamepad = {
 			on: false,
 			ind: this.id,
-			obj: null,
+			
+			speed: DEFAULT_MOVEMANUAL_SPEED,
+			dir: 1,
+			
+			interval: window.setInterval(this.updateGamepadData.bind(this), GAMEPAD_REFRESH_RATE),
+			btn_clicks: {}
 		};
+		this.gamepad.btn_clicks[GAMEPAD_Y_BTN] = false;
+		this.gamepad.btn_clicks[GAMEPAD_X_BTN] = false;
 		
 		this.color = color === null ? Tank.colors[ Tank.colors.length % (this.id+1) ] : color;
 		this.path = new Path2D();
@@ -565,10 +599,6 @@ class Tank{
 		this.parseData( String.fromCharCode.apply(null, new Uint8Array(data)) );
 	}
 	setMoveData(rec){
-		this.updateGamepadData();
-		// other sources
-		// ...
-		
 		// prepare data
 		let msg = '';
 		for (let key1 in this.data){
@@ -580,6 +610,7 @@ class Tank{
 				else                        msg += `${key1},com,${key2};${obj.join(',')}\n`;
 			}
 		}
+		
 		this.sendData(msg, this.coms.move.stream, rec);
 	}
 	setVel0(){
@@ -618,8 +649,8 @@ class Tank{
 	
 	// return = [left wheel speed, right wheel speed]
 	gamepadStickToVel(vel){
-		vel[0] *= 0.3;
-		vel[1] *= 0.3;
+		vel[0] *= this.gamepad.speed*this.gamepad.dir;
+		vel[1] *= this.gamepad.speed*this.gamepad.dir;
 		
 		const DEADZONE = 0.2;
 		let dist = (vel[0]**2 + vel[1]**2)**0.5;
@@ -634,8 +665,20 @@ class Tank{
 		this.gamepad.obj = navigator.getGamepads()[this.gamepad.ind];
 		
 		this.data.move.com.vel = this.gamepadStickToVel([this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]]);
-		// other buttons
-		// ...
+		
+		let mappings = [
+			[GAMEPAD_Y_BTN, this.snapAutoMarker.bind(this)], 
+			[GAMEPAD_X_BTN, ()=>getdom(`.check_manualmovedir[tankid="${this.id}"]`)[0].click()]
+		];
+		for (let mapping of mappings){
+			if (this.gamepad.obj.buttons[mapping[0]].pressed){
+				if (!this.gamepad.btn_clicks[mapping[0]]){
+					mapping[1]();
+					this.gamepad.btn_clicks[mapping[0]] = true;
+				}
+			}
+			else this.gamepad.btn_clicks[mapping[0]] = false;
+		}
 	}
 	toggleGamepad(on){
 		if (this.gamepad.on && !on) this.setVel0(); // from enabled to disabled
@@ -685,6 +728,9 @@ class Tank{
 		this.sendOptsMarkers();
 		drawOverlay();
 	}
+	snapAutoMarker(){
+		this.sendOptsDO('SNAPAUTOBOARD', '"Add auto markers"');
+	}
 	
 	draw(){
 		ctx.main.save();
@@ -716,13 +762,22 @@ function addTank(){
 			<details>
 				<summary>Movement</summary>
 				Mode: ${html_radiozone("radio_movemode", ["manual", "auto"], tank.data.move.auto.on ? 1 : 0, tankidattr)}
-				<div>
-					Target pos.: ${html_inputzone(
-						2, 'input_targetpos',
-						[tank.data.move.com.pos[0].toFixed(1), tank.data.move.com.pos[0].toFixed(1)],
-						[tankidattr+' size=2', tankidattr+' size=2']
-					)}<!--
-					--><input type="image" src="res/click.png" class="btn_picktargetpos btn" ${tankidattr} style="animation:none;"></input>
+				<div class="move_params_container">
+					<div class="move_params automove_params" style="display:${tank.data.move.auto.on ? 'inline' : 'none'}">
+						Speed: ${html_sliderboxzone(0, 1, DEFAULT_MOVEAUTO_SPEED ,'moveautospeed', 'size=2')}
+						<br>Target pos.: ${html_inputzone(
+							2, 'input_targetpos',
+							[tank.data.move.com.pos[0].toFixed(1), tank.data.move.com.pos[0].toFixed(1)],
+							[tankidattr+' size=2', tankidattr+' size=2']
+						)}<!--
+						--><input type="image" src="res/click.png" class="btn_picktargetpos btn" ${tankidattr} style="animation:none;"></input>
+						<br><input type="button" class="btn_startAutoMove" value="Start">
+						<input type="button" class="btn_stopAutoMove" value="Stop">
+					</div>
+					<div class="move_params manualmove_params" style="display:${tank.data.move.auto.on ? 'none' : 'inline'}">
+						Speed: ${html_sliderboxzone(0, 1, DEFAULT_MOVEMANUAL_SPEED ,'movemanualspeed', 'size=2')}
+						<br><input type="checkbox" class="check_manualmovedir" ${tankidattr}>reverse   <img src='res/xbox_btn_X.svg' class="xbox_btn">
+					</div>
 				</div>
 			</details>
 			<details>
@@ -746,7 +801,7 @@ function addTank(){
 							1, 'input_autoparams',
 							[ARUCO_GRID_CSIZE], [tankidattr+' size=2']
 						)}
-						<br><input type="button" class="btn_addmarkers" value="Add markers">
+						<br><button class="btn_addmarkers">Add markers <img src='res/xbox_btn_Y.svg' class="xbox_btn"></button>
 						<input type="button" class="btn_resetmarkers" value="Reset markers"><br>
 						<span class="nb_markers">0</span> markers found
 					</div>
@@ -797,14 +852,22 @@ function addTank(){
 	
 	// html_radiozone callbacks
 	set_radiozone_callbacks(
-		(nodezone, value) => tank.toggleMoveAuto(value == 'auto')
-	, tankdiv, 'radio_movemode');
+		(nodezone, value) =>{
+			getdom('.move_params', tankdiv).forEach( node => node.style.display = "none" );
+			getdom(`.${value}move_params`, tankdiv)[0].style.display = 'inline';
+			tank.toggleMoveAuto(value == 'auto');
+		},
+	tankdiv, 'radio_movemode');
 	set_radiozone_callbacks(
 		(nodezone, value) => tank.sendOptsSET(['cannon', 'auto', 'on'], value == 'auto')
 	, tankdiv, 'radio_cannonmode');
 	set_radiozone_callbacks(
 		(nodezone, value) => tank.toggleMarkersType(value)
 	, tankdiv, 'radio_boardtype');
+	
+	// html_sliderboxzone callbacks
+	set_sliderbox_callback(tankdiv, 'moveautospeed', value => tank.sendOptsSET(['move','auto','speed'], Number(value)));
+	set_sliderbox_callback(tankdiv, 'movemanualspeed', value => tank.gamepad.speed = Number(value));
 	
 	// other callbacks
 	getdom('.btn_refresh', tankdiv)[0].addEventListener('click', ()=>tank.refresh() );
@@ -818,8 +881,9 @@ function addTank(){
 		if (this.checked) tank.initCamStream();
 		else              tank.closeCamStream();
 	});
-	getdom('.btn_addmarkers', tankdiv)[0].addEventListener('click', function(){ tank.sendOptsDO('SNAPAUTOBOARD', '"Add auto markers"'); });
-	getdom('.btn_resetmarkers', tankdiv)[0].addEventListener('click', function(){ tank.sendOptsDO('RESETAUTOBOARD', '"Reset auto markers"'); });
+	getdom('.btn_addmarkers', tankdiv)[0].addEventListener('click', ()=> tank.snapAutoMarker());
+	getdom('.btn_resetmarkers', tankdiv)[0].addEventListener('click', ()=> tank.sendOptsDO('RESETAUTOBOARD', '"Reset auto markers"'));
+	getdom('.check_manualmovedir', tankdiv)[0].addEventListener('change', function(){ tank.gamepad.dir = this.checked ? -1 : 1; });
 }
 
 let pospicker_tank = null;
@@ -918,10 +982,16 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
+	. display markers ids
+	. add slider for canvas zoom, slider for x pos, slider for y pos, slider for canvas rotation, checkbutton for centered on tank
 	. add ability to delete specific markers from auto board
-	. add press X on gamepad to take auto board snap
+	. add cannon behavior
+
+	. add code for obstacles
+	. add ability to manually add obstacles
+	. add path computation around obstacles (A*, use vertecies of rectangle obstacles)
+	
 	. add support for multiple tanks (using different ports ?)
-	. add input to select speed factor for manual / auto control
 	. canvas add axes
 	. canvas support scroll / zoom
 	. use input type number

@@ -60,6 +60,10 @@ body{
 	background-color: rgb(255,125,125);
 }
 
+.xbox_btn{
+	width: 0.8rem;
+}
+
 #div_data{
 	display: flex;
 	flex-direction: column;
