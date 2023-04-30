@@ -45,7 +45,7 @@ body{
 	float: right;
 	background-color: rgb(125,125,255);
 }
-.btn_picktargetpos{
+.btn_blink{
 	margin-left: 5px;
 	animation: blinker steps(2, jump-none) 750ms infinite;
 }

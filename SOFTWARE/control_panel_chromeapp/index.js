@@ -124,15 +124,19 @@ function dispmsgGamepad(ind, msg){
 	msgconsole.innerHTML += `<br>GAMEPAD&lt;${ind}&gt; <b>::</b> ${msg}`;
 }
 
-let canvas = getdom('#canvas_main')[0]; // main canvas
-let canvas_overlay = getdom('#canvas_overlay')[0]; // common overlay canvas
-let ctx = {main: canvas.getContext('2d'), overlay: canvas_overlay.getContext('2d')};
-let canvasW = canvas.width; let canvasH = canvas.height;
+let canvases = getdom('canvas');
+let canvas_overlay_top = arr_last(canvases);
+let ctx = {
+	main: canvases[0].getContext('2d'),
+	overlay: canvases[1].getContext('2d'),
+	overlay2: canvases[2].getContext('2d')
+};
+let canvasW = canvases[0].width; let canvasH = canvases[0].height;
 let base_size = 1; // canavs size in meters
 let pxPerM = Math.min(canvasW, canvasH) / base_size;
 
 function setCanvasTransform(x, y, rotx, roty){
-	for (let key in ctx){
+	for (let key of ['main', 'overlay']){
 		ctx[key].setTransform(1,0,0,1, canvasW/2+x, canvasH/2+y); // origin at center at first
 		ctx[key].transform(rotx, roty, -roty, rotx, 0,0);
 	}
@@ -417,6 +421,9 @@ class Tank{
 					corners: [],
 					ids: []
 				}
+			},
+			obstacles: {
+				virtual: []
 			}
 		};
 		
@@ -590,14 +597,14 @@ class Tank{
 		this.sendData(req, this.coms.opts.stream);
 		this.coms.opts.handlers.push(callback);
 	}
-	sendOptsSET(parts, val){ // send SET request
+	sendOptsSET(parts, val, setval=true){ // send SET request
 		let type = typeof val;
 		     if (type == 'boolean') this.sendOptsReq(`SET\n${parts.join(',')};${val ? '1' : '0'}\n\n`);
 		else if (type == 'number')  this.sendOptsReq(`SET\n${parts.join(',')};${val}\n\n`);
 		else if (type == 'string')  this.sendOptsReq(`SET\n${parts.join(',')};${val}\n\n`);
 		else /* array */            this.sendOptsReq(`SET\n${parts.join(',')};${val.join(',')}\n\n`);
 		
-		obj_set(this.data, parts, val);
+		if (setval) obj_set(this.data, parts, val);
 		this.dispmsg(`"${parts}" set to "${val}"`);
 	}
 	sendOptsGET(parts){ // send GET request
@@ -763,6 +770,12 @@ class Tank{
 		this.sendOptsDO('SNAPAUTOBOARD', '"Add auto markers"');
 	}
 	
+	addVirtualObstacle(vals){ // vals = [cornerTLx, cornerTLy, cornerBRx, cornerBRy]
+		this.data.obstacles.virtual.push(vals);
+		//this.sendOptsSET(['obstacles', 'virtual'], vals);
+		drawOverlay();
+	}
+	
 	draw(){
 		ctx.main.fillStyle = this.color;
 		
@@ -818,7 +831,7 @@ function addTank(){
 							[tank.data.move.com.pos[0].toFixed(1), tank.data.move.com.pos[0].toFixed(1)],
 							[tankidattr+' size=2', tankidattr+' size=2']
 						)}<!--
-						--><input type="image" src="res/click.png" class="btn_picktargetpos btn" ${tankidattr} style="animation:none;"></input>
+						--><input type="image" src="res/click.png" class="btn_picktargetpos btn_blink btn" ${tankidattr} style="animation:none;"></input>
 						<br><input type="button" class="btn_startAutoMove" value="Start">
 						<input type="button" class="btn_stopAutoMove" value="Stop">
 					</div>
@@ -855,7 +868,20 @@ function addTank(){
 						<span class="nb_markers">0</span> markers found
 					</div>
 				</div>	
-			</details><br>
+			</details>
+			<details>
+				<summary>Obstacles</summary>
+				<details style="margin-left: 1rem;">
+					<summary>Virtual</summary>
+					tl: <input type='text' class="input_virtcorners" ${tankidattr} size='1' value='0.1'> <b>;</b> <input type='text' class="input_virtcorners" ${tankidattr} size='1' value='0.1'>
+					tr: <input type='text' class="input_virtcorners" ${tankidattr} size='1' value='0.5'> <b>;</b> <input type='text' class="input_virtcorners" ${tankidattr} size='1' value='0.1'><!--
+					--><input type="image" src="res/click.png" class="btn_pickvirtobst btn_blink btn" ${tankidattr} style="animation:none;"></input>
+					<br><input type="button" class="btn_addvirtobst" value="Add obstacle">
+					<br><br>
+					<input type="button" class="btn_delvirtobst" value="Remove obstacle"> id n°${html_inputzone(1, 'input_delvirtobst', [0], [tankidattr+' size=1'])}
+				</details>	
+			</details>	
+			<br>
 			<div>
 				<input type="checkbox" class="check_gamepad" ${tank.gamepad.on ? "checked" : ""} ${tankidattr}>
 				Gamepad ${html_inputzone(
@@ -939,11 +965,18 @@ function addTank(){
 	});
 	getdom('.btn_startAutoMove', tankdiv)[0].addEventListener('click', ()=> tank.sendOptsDO('STARTMOVEAUTO', '"Start auto. movement"'));
 	getdom('.btn_stopAutoMove', tankdiv)[0].addEventListener('click', ()=> tank.sendOptsDO('STOPMOVEAUTO', '"Stop auto. movement"'));
+	getdom('.btn_pickvirtobst', tankdiv)[0].addEventListener('click', function(){
+		if (virtobst_tank == tank) unlatch_virtobst();
+		else                       latch_virtobst(tank, this);
+	});
+	getdom('.btn_addvirtobst', tankdiv)[0].addEventListener('click', function(){
+		tank.addVirtualObstacle(getdom('.input_virtcorners', this.parentNode).map( node => Number(node.value) ))
+	});
 }
 
 let pospicker_tank = null;
 function latch_targetpospicker(tank, node){
-	canvas_overlay.style.cursor = `url('${tank.pickerUrl}') 0 24,auto`;
+	canvas_overlay_top.style.cursor = `url('${tank.pickerUrl}') 0 24,auto`;
 	getdom('.btn_picktargetpos').forEach(el => {
 		el.style.animation = 'none';
 		el.style.boxShadow = null;
@@ -953,12 +986,33 @@ function latch_targetpospicker(tank, node){
 	pospicker_tank = tank;
 }
 function unlatch_targetpospicker(){
-	canvas_overlay.style.cursor = 'auto';
+	canvas_overlay_top.style.cursor = 'auto';
 	getdom('.btn_picktargetpos').forEach(el => {
 		el.style.animation = 'none';
 		el.style.boxShadow = null;
 	});
 	pospicker_tank = null;
+	drawOverlay();
+}
+
+let virtobst_tank = null;
+function latch_virtobst(tank, node){
+	canvas_overlay_top.style.cursor = 'crosshair';
+	getdom('.btn_pickvirtobst').forEach(el => {
+		el.style.animation = 'none';
+		el.style.boxShadow = null;
+	});
+	node.style.animation = null;
+	node.style.boxShadow = 'none';
+	virtobst_tank = tank;
+}
+function unlatch_virtobst(){
+	canvas_overlay_top.style.cursor = 'auto';
+	getdom('.btn_pickvirtobst').forEach(el => {
+		el.style.animation = 'none';
+		el.style.boxShadow = null;
+	});
+	virtobst_tank = null;
 	drawOverlay();
 }
 function drawOverlay(){
@@ -973,6 +1027,11 @@ function drawOverlay(){
 		let type = tank.data.markers.type;
 		let corners = tank.data.markers[type].corners;
 		let ids = tank.data.markers[type].ids;
+		
+		ctx.overlay.lineWidth = 2;
+		ctx.overlay.setLineDash([]);
+		ctx.overlay.strokeStyle = tank.color;
+		
 		for (let i=0; i<ids.length; i++){
 			
 			let [x1,y1] = [Math.round(corners[i][0][0]*pxPerM), Math.round(corners[i][0][1]*pxPerM)];
@@ -982,6 +1041,7 @@ function drawOverlay(){
 			
 			ctx.overlay.beginPath();
 			ctx.overlay.lineWidth = 2;
+			ctx.overlay.setLineDash([]);
 			ctx.overlay.strokeStyle = tank.color;
 			ctx.overlay.moveTo(x1, y1);
 			ctx.overlay.lineTo(x2, y2);
@@ -997,8 +1057,17 @@ function drawOverlay(){
 		}
 	}
 	
-	// draw targets
 	for (let tank of tanks){
+		// draw virtual obstacles
+		for (let obstacle of tank.data.obstacles.virtual){
+			ctx.overlay.beginPath();
+			ctx.overlay.rect(obstacle[0]*pxPerM, obstacle[1]*pxPerM, (obstacle[2]-obstacle[0])*pxPerM, (obstacle[3]-obstacle[1])*pxPerM)
+			ctx.overlay.strokeStyle = tank.color;
+			ctx.overlay.setLineDash([4, 4]);
+			ctx.overlay.lineWidth = 4;
+			ctx.overlay.stroke();
+		}
+		// draw targets
 		let imgw = tank.pickerImg.width; 
 		let imgh = tank.pickerImg.height; 
 		ctx.overlay.drawImage(tank.pickerImg, tank.data.move.auto.target[0]*pxPerM, tank.data.move.auto.target[1]*pxPerM - imgh);
@@ -1020,15 +1089,65 @@ window.setInterval(() => {
 
 getdom("#btn_addtank")[0].addEventListener('click', addTank);
 
-canvas_overlay.addEventListener("click", ev => {
+let convert_mouse_pos_px = ev =>{
+	let canvasRect = canvas_overlay_top.getBoundingClientRect();
+	return [ ev.pageX - canvasRect.left, ev.pageY - canvasRect.top ];
+};
+let convert_mouse_pos = ev =>{
+	let invMat = ctx.overlay.getTransform().inverse();
+	let [x, y] = convert_mouse_pos_px(ev);
+	return [ (x * invMat.a + y * invMat.c + invMat.e)/pxPerM, (x * invMat.b + y * invMat.d + invMat.f)/pxPerM, x, y ];
+};
+let mouse = {
+	start_drag: null,
+	pressed: false
+};
+canvas_overlay_top.addEventListener("mousedown", ev => {
+	mouse.pressed = true;
+	if (mouse.start_drag == null){
+		mouse.start_drag = convert_mouse_pos(ev);
+	}
+});
+canvas_overlay_top.addEventListener("mouseup", ev => {
+	mouse.pressed = false;
+	if (mouse.start_drag != null){
+		
+		if (virtobst_tank != null){
+			ctx.overlay2.clearRect(0, 0, canvasW, canvasH);
+			
+			let [x, y] = convert_mouse_pos(ev);
+			
+			let textfields = getdom(`.input_virtcorners[tankid='${virtobst_tank.id}']`);
+			textfields[0].value = mouse.start_drag[0].toFixed(4);
+			textfields[1].value = mouse.start_drag[1].toFixed(4);
+			textfields[2].value = x.toFixed(4);
+			textfields[3].value = y.toFixed(4);
+			
+			unlatch_virtobst();
+		}
+		
+		mouse.start_drag = null;
+	}
+});
+canvas_overlay_top.addEventListener("mousemove", ev => {
+	if (mouse.pressed){
+		if (mouse.start_drag != null && virtobst_tank != null){
+			ctx.overlay2.clearRect(0, 0, canvasW, canvasH);
+			ctx.overlay2.beginPath();
+			let [x, y] = convert_mouse_pos_px(ev);
+			ctx.overlay2.rect(mouse.start_drag[2], mouse.start_drag[3], x-mouse.start_drag[2], y-mouse.start_drag[3])
+			ctx.overlay2.strokeStyle = '#000000';
+			ctx.overlay2.setLineDash([7, 7]);
+			ctx.overlay2.lineWidth = 2;
+			ctx.overlay2.stroke();
+		}
+	}
+});
+canvas_overlay_top.addEventListener("click", ev => {	
 	if (pospicker_tank !== null){
 		ev.preventDefault();
 		
-		let invMat = ctx.overlay.getTransform().inverse();
-		let canvasRect = canvas.getBoundingClientRect();
-		let [x, y] = [ ev.pageX - canvasRect.left, ev.pageY - canvasRect.top ];
-		x = (x * invMat.a + y * invMat.c + invMat.e)/pxPerM;
-		y = (y * invMat.b + y * invMat.d + invMat.f)/pxPerM;
+		let [x, y] = convert_mouse_pos(ev);
 		
 		let textfields = getdom(`.input_targetpos[tankid='${pospicker_tank.id}']`);
 		textfields[0].value = x.toFixed(4);
