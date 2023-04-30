@@ -224,13 +224,6 @@ def update_auto_markers_size(self, msize):
 	self.val = msize
 	reset_auto_board()
 
-def reset_auto_board():
-	global current_mobj
-	
-	data['markers']['auto'] = newAutoBoard()
-	if data['markers']['type'].val == 'auto':
-		current_mobj = data['markers']['auto']
-		send_auto_markers() # will send empty list of markers
 def set_move_vel(vel):
 	vel[1] *= -1
 	data['move']['real']['vel'].val = vel
@@ -242,25 +235,40 @@ def stopMoveAuto():
 	data['move']['auto']['run'] = False
 	set_move_vel([0,0])
 def auto_move():
-	if not data['move']['auto']['run'] : return
+	if not data['move']['auto']['run'] or transfo == None : return
 	
 	target = data['move']['auto']['target'].val
-	pos = data['move']['real']['pos'].val
-	tankdir = data['move']['real']['dir'].val
 	speed = data['move']['auto']['speed'].val
 	
-	dirTarget = [ target[0]-pos[0], target[1]-pos[1] ]
-	dirTargetNorm = math.sqrt(dirTarget[0]**2 + dirTarget[1]**2)
-	dirTarget[0] /= dirTargetNorm
-	dirTarget[1] /= dirTargetNorm
-	# tankdir is already normalized
+	# X, Y axes of tank
+	tankY = transfo[1]
+	tmp = tankY[0]**2 + tankY[1]**2
+	tankX = [tankY[1]/tmp, -tankY[0]/tmp]
+	# projection of target on those axes
+	dirTarget = [target[0]-transfo[0][0], target[1]-transfo[0][1]]
+	targetX = dirTarget[0]*tankX[0] + dirTarget[1]*tankX[1]
+	targetY = dirTarget[0]*tankY[0] + dirTarget[1]*tankY[1]
+	norm = math.sqrt(targetX**2 + targetY**2)
+	velX = targetX/norm ; velY = targetY/norm
 	
-	angle = math.pi/2 - math.acos(tankdir[0]*dirTarget[0] + tankdir[1]*dirTarget[1])
-	vel = [math.cos(angle), math.sin(angle)]
+	# doesn't work...
+	# in camera coords (we use the transformation matrix)
+	#vel = np.matmul(transfo[2], np.array([target[0],target[1],0,1], dtype=np.float32))[:2]
+	#vel /= np.linalg.norm(vel)
 	
-	if angle >= -math.pi/2 and angle <= math.pi/2 : set_move_vel([speed, vel[1]*speed])
-	else                                          : set_move_vel([vel[1]*speed, dist*speed])
+	# almost same as the corresponding gamepad javascript code
+	velX *= speed ; velY *= speed
+	angle = math.atan2(velY, velX)
+	if angle >= -math.pi/2 and angle <= math.pi/2 : set_move_vel([velY, speed])
+	else                                          : set_move_vel([speed, velY])
 
+def reset_auto_board():
+	global current_mobj
+	
+	data['markers']['auto'] = newAutoBoard()
+	if data['markers']['type'].val == 'auto':
+		current_mobj = data['markers']['auto']
+		send_auto_markers() # will send empty list of markers
 def newAutoBoard():
 	return Object(
 		cells = {}, cells_tmp = {}, cells_i = {}, # cells contains cells positioned relative to origin with smallest id, cells_tmp contains all cells
@@ -313,7 +321,7 @@ timeouts = {
 }
 if not data['move']['auto']['on'].val : timeouts['check_movedata'].enable()
 
-set_timer('stream_imgframe', 1/20) # 20 fps
+set_timer('stream_imgframe', 1/11) # 11 fps
 set_timer('movedata', 1/10) # 10 fps
 transfo = None
 while True:
@@ -329,16 +337,11 @@ while True:
 		
 		camera_frame = fisheye_undistort(cameradata, camera_frame)
 		
-		# build marker board
-		#if data['markers']['type'].val == 'auto':
-		#	if auto_make_board(cameradata, camera_frame, data['markers']['auto'], data['markers']['auto_s'].val, aruco_dict):
-		#		send_auto_markers()
-		
 		# compute tank pos, speed
 		if current_mobj is not None:
 			transfo = getBoardTransform(cameradata, camera_frame, current_mobj.board, aruco_dict, transfo)
 			if transfo is not None:
-				data['move']['real']['pos'].val = transfo[0]
+				data['move']['real']['pos'].val = transfo[0][:2]
 				data['move']['real']['dir'].val = transfo[1]
 				if data['move']['auto']['on'].val : auto_move()
 	

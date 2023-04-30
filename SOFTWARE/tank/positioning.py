@@ -94,17 +94,17 @@ def auto_make_board(cameradata, videoframe, m_obj, ms, dictio):
 	
 	return newMarkers
 
-def getTransformationMatrix(rvec, tvec):    # rvec and tvec straight from opencv function (with the weird shapes)
+def getTransformationMatrix(rvec, tvec, rmat=None):    # rvec and tvec straight from opencv function (with the weird shapes)
 	# get rotation matrix from rotation vector
-	rmat = cv2.Rodrigues(rvec)[0]
+	rmat = cv2.Rodrigues(rvec)[0] if rmat is None else rmat
 	transfo = np.zeros((4,4), np.float32)
 	transfo[3,3] = 1
 	transfo[0:3, 0:3] = rmat
 	transfo[0:3, 3] = np.squeeze(tvec)
 	return transfo
-def getInvTransformationMatrix(rvec, tvec): #
+def getInvTransformationMatrix(rvec, tvec, rmat=None): #
 	# get rotation matrix from rotation vector
-	rmat = cv2.Rodrigues(rvec)[0]
+	rmat = cv2.Rodrigues(rvec)[0] if rmat is None else rmat
 	# get inverse of rotation matrix: inv(R) = transpose(R)
 	invRMat = np.transpose(rmat)
 	# get inverse of tranformation matrix (rotation + translation)
@@ -136,7 +136,9 @@ def getBoardTransform(cameradata, videoframe, board, dictio, transfo=None):
 			#aruco.drawDetectedMarkers(videoframe, corners, ids)
 			#cv2.drawFrameAxes(videoframe, cameradata['matrix'], cameradata['coeffs'], rvec, tvec, 0.7)
 			
-			invTransfo = getInvTransformationMatrix(rvec, tvec)
+			rmat = cv2.Rodrigues(rvec)[0]
+			newTransfo = getTransformationMatrix(rvec, tvec, rmat)
+			invTransfo = getInvTransformationMatrix(rvec, tvec, rmat)
 			
 			# get cam pos (transform [0,0,0] from cam coords to board coords)
 			cam_pos = np.matmul(invTransfo, np.array([0,0,0,1]))
@@ -147,12 +149,12 @@ def getBoardTransform(cameradata, videoframe, board, dictio, transfo=None):
 			
 			# get cam rotation around board z
 			# transform the optical axis (vector [0,0,1]) from cam coords to board coords
+			# we must transform both points of the camera z-axis vector
 			cam_forward = np.matmul(invTransfo, np.array([0,0,1,1], np.float32)) - cam_pos
 			# project unto (x,y) plane of board
-			cam_dir = np.array([cam_forward[0], cam_forward[1], 0], np.float32)
-			cam_dir /= np.linalg.norm(cam_dir)
+			cam_forward[:2] /= np.linalg.norm(cam_forward[:2])
 			
-			return (cam_pos[0:2], cam_dir[0:2])
+			return (cam_pos, cam_forward[:2], newTransfo)
 		else : return None
 	else : return None
 
