@@ -1,7 +1,7 @@
 # Note for windows CMD: if QuickEdit mode is enabled, clicking the console freezes the script until a keyboard key is pressed... 
 
 from util import * # util.py
-from positioning import getBoardTransform, auto_make_board # positioning.py
+from positioning import getBoardTransform, auto_make_board, sdf_rect # positioning.py
 
 import cv2
 from cv2 import aruco
@@ -400,6 +400,9 @@ while True:
 
 # TODO:
 
+#	- Obstacle avoidance:
+#		- use A* algo on edges of obstacle rectangles
+#		- have the obstacle apply a force
 #	- Ajouter code obstacles (obstacles via camera + ajout manuel via interface)
 #	- use getBoardObjectAndImagePoints and solvePnP instead of estimatePoseBoard ?
 # 	- optimize code:

@@ -158,6 +158,8 @@ def getBoardTransform(cameradata, videoframe, board, dictio, transfo=None):
 		else : return None
 	else : return None
 
+# "Signed distance functions" like, but returns direction vector not just distance
+def sdf_rect(p1x, p1y, r1x, r1y, r2x, r2y) : return [max(r1x, min(px, r2x)), max(r1y, min(py, r2y))]
 
 # For testing
 #import pickle
