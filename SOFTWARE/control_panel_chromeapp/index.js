@@ -46,15 +46,24 @@ function setNodesVals(nodes, vals){ nodes.forEach((node,ind) => {
 	node.value = vals[ind];
 	node.setAttribute('oldvalue', vals[ind]);
 }); }
-let html_inputzone = (n=1, classes="", values=null, attrs=null, sep="<b> ; </b>") => {
-	let inputs = [...Array(n).keys()].map(ind => 
-		`<input 
-			type="text" 
-			${ attrs === null ? "" : attrs[ind] } 
-			${ values === null ? "value='' oldvalue=''" : `value="${values[ind]}" oldvalue="${values[ind]}"` }
-			class="in_inputzone ${classes}"
-		>`
-	);
+let html_inputzone = (n=1, classes="", values=null, attrs=null, sep=null, type='text') => {
+	sep = sep == null ? "<b> ; </b>" : sep;
+	let inputs = 
+		type == 'text' ? [...Array(n).keys()].map(ind => 
+			`<input 
+				type="text" 
+				${ attrs === null ? "" : attrs[ind] } 
+				${ values === null ? "value='' oldvalue=''" : `value="${values[ind]}" oldvalue="${values[ind]}"` }
+				class="in_inputzone ${classes}"
+			>`
+		) : 
+		[...Array(n).keys()].map(ind => 
+			`<textarea
+				${ attrs === null ? "" : attrs[ind] } 
+				${ values === null ? "value='' oldvalue=''" : `value="${values[ind]}" oldvalue="${values[ind]}"` }
+				class="in_inputzone ${classes}"
+			></textarea>`
+		);
 	if (typeof sep == 'string') inputs = inputs.join(sep);
 	else /* array */            inputs = inputs.shift() + inputs.map((str,i) => sep[i]+str);
 	
@@ -71,13 +80,13 @@ function set_inputzonebtns_callbacks(on_ok, n, tankdiv, inputtag){
 	let inputzone = getdom(inputtag, tankdiv)[0].parentNode;
 	
 	getdom('.btn_ok', inputzone)[0].addEventListener( 'click', function(){
-		let nodes = getdom('input', this.parentNode.parentNode).splice(0, n);
+		let nodes = getdom('.in_inputzone', this.parentNode.parentNode).splice(0, n);
 		on_ok(nodes);
 		updateNodesVals(nodes);
 		this.parentNode.style.display = 'none';
 	} );
 	getdom('.btn_cancel', inputzone)[0].addEventListener( 'click', function(){
-		resetNodesVals( getdom('input', this.parentNode.parentNode).splice(0, n) );
+		resetNodesVals( getdom('.in_inputzone', this.parentNode.parentNode).splice(0, n) );
 		this.parentNode.style.display = 'none';
 	} );
 }
@@ -129,7 +138,8 @@ let canvas_overlay_top = arr_last(canvases);
 let ctx = {
 	main: canvases[0].getContext('2d'),
 	overlay: canvases[1].getContext('2d'),
-	overlay2: canvases[2].getContext('2d')
+	overlay2: canvases[2].getContext('2d'),
+	overlay3: canvases[3].getContext('2d')
 };
 let canvasW = canvases[0].width; let canvasH = canvases[0].height;
 let base_size = 1; // canavs size in meters
@@ -392,7 +402,9 @@ class Tank{
 				},
 				auto: { // automatic mode
 					on: false,
+					type: 'target',
 					target: [0, 0],
+					trajectory: [],
 					speed: DEFAULT_MOVEAUTO_SPEED
 				}
 			},
@@ -562,6 +574,8 @@ class Tank{
 	}
 	// send move / opts string data, handle errors
 	sendData(msg, socket, callback=noop){
+		if (this.neterr) return;
+		
 		socket.send( Uint8Array.from(msg, el => el.charCodeAt()), callback, this.toggleNeterror.bind(this, true) );
 	}
 	
@@ -570,8 +584,9 @@ class Tank{
 	getOptsResp(resp){
 		String.fromCharCode.apply( null, new Uint8Array(resp) ).split('\n\n').forEach( msg => {
 			if (msg != ''){
-				if (msg.startsWith("SETAUTOMARKERS")) this.getOptsAutoMarkers(msg);
-				else                                  this.coms.opts.handlers.shift()(msg);
+				if      (msg.startsWith("SETAUTOMARKERS"))    this.getOptsAutoMarkers(msg);
+				else if (msg.startsWith("SETCURRENTTRAJPNT")) this.getOptsCurrentTrajPnt(msg);
+				else                                          this.coms.opts.handlers.shift()(msg);
 			}
 		});
 	}
@@ -591,13 +606,23 @@ class Tank{
 		getdom(`.div_tank[tankid="${this.id}"] .nb_markers`)[0].innerHTML = mids.length;
 		drawOverlay();
 	}
+	getOptsCurrentTrajPnt(msg){
+		getdom(`.div_tank[tankid="${this.id}"] .current_traj_pnt`)[0].innerHTML = msg.split('\n')[1];
+	}
 	// send opts request to tcp server
 	sendOptsReq(req, callback=noop){
 		if (this.neterr) return;
 		this.sendData(req, this.coms.opts.stream);
 		this.coms.opts.handlers.push(callback);
 	}
-	sendOptsSET(parts, val, setval=true){ // send SET request
+	sendOptsSET(parts, val=null){ // send SET request
+		let setval;
+		if (val == null){
+			val = obj_get(this.data, parts);
+			setval = false;
+		}
+		else setval = true;
+		
 		let type = typeof val;
 		     if (type == 'boolean') this.sendOptsReq(`SET\n${parts.join(',')};${val ? '1' : '0'}\n\n`);
 		else if (type == 'number')  this.sendOptsReq(`SET\n${parts.join(',')};${val}\n\n`);
@@ -655,11 +680,16 @@ class Tank{
 		this.data.move.com.vel = [0,0];
 		this.sendData('move,com,vel;0,0\n', this.coms.move.stream);
 	}
+	
 	toggleMoveAuto(on){
 		this.regenMoveDataLoop();
 		if (!on) this.coms.move.out_loop.start(); // auto is off, manual is on
 		
 		this.sendOptsSET(['move', 'auto', 'on'], on);
+	}
+	setMoveAutoType(type){
+		this.sendOptsSET(['move', 'auto', 'type'], type);
+		drawOverlay();
 	}
 	
 	refresh(){
@@ -771,8 +801,8 @@ class Tank{
 	}
 	
 	addVirtualObstacle(vals){ // vals = [cornerTLx, cornerTLy, cornerBRx, cornerBRy]
-		this.data.obstacles.virtual.push(vals);
-		//this.sendOptsSET(['obstacles', 'virtual'], vals);
+		this.data.obstacles.virtual.push(...vals);
+		this.sendOptsSET(['obstacles', 'virtual']);
 		drawOverlay();
 	}
 	
@@ -824,17 +854,32 @@ function addTank(){
 				<summary>Movement</summary>
 				Mode: ${html_radiozone("radio_movemode", ["manual", "auto"], tank.data.move.auto.on ? 1 : 0, tankidattr)}
 				<div class="move_params_container">
+					
 					<div class="move_params automove_params" style="display:${tank.data.move.auto.on ? 'inline' : 'none'}">
 						Speed: ${html_sliderboxzone(0, 1, DEFAULT_MOVEAUTO_SPEED ,'moveautospeed', 'size=2')}
-						<br>Target pos.: ${html_inputzone(
-							2, 'input_targetpos',
-							[tank.data.move.com.pos[0].toFixed(1), tank.data.move.com.pos[0].toFixed(1)],
-							[tankidattr+' size=2', tankidattr+' size=2']
-						)}<!--
-						--><input type="image" src="res/click.png" class="btn_picktargetpos btn_blink btn" ${tankidattr} style="animation:none;"></input>
-						<br><input type="button" class="btn_startAutoMove" value="Start">
+						<br><br>Type: ${html_radiozone("radio_moveautomode", ["target", "trajectory"], tank.data.move.auto.type == 'target' ? 0 : 1, tankidattr)}
+						
+						<div class="moveauto_params_container">
+							<div class="targetmoveauto_params move_params2" style="display:${tank.data.move.auto.type == 'target' ? 'inline' : 'none'}">
+								Target pos.: ${html_inputzone(
+									2, 'input_targetpos',
+									[tank.data.move.com.pos[0].toFixed(1), tank.data.move.com.pos[0].toFixed(1)],
+									[tankidattr+' size=2', tankidattr+' size=2']
+								)}<!--
+								--><input type="image" src="res/click.png" class="btn_picktargetpos btn_blink btn" ${tankidattr} style="animation:none;"></input>
+							</div>
+							
+							<div class="trajectorymoveauto_params move_params2" style="display:${tank.data.move.auto.type == 'trajectory' ? 'inline' : 'none'}">
+								Trajectory: ${html_inputzone(1, 'input_trajectory', [0,0,1,1,3,-0.5], [tankidattr+" style='vertical-align:middle;'"], null, 'textarea')}<!--
+								--><input type="image" src="res/click.png" class="btn_picktrajectory btn_blink btn" ${tankidattr} style="animation:none;"></input>
+								<br>Current trajectory target point: <span class="current_traj_pnt">0</span>
+							</div>
+						</div>
+						
+						<br><br><input type="button" class="btn_startAutoMove" value="Start">
 						<input type="button" class="btn_stopAutoMove" value="Stop">
 					</div>
+					
 					<div class="move_params manualmove_params" style="display:${tank.data.move.auto.on ? 'none' : 'inline'}">
 						Speed: ${html_sliderboxzone(0, 1, DEFAULT_MOVEMANUAL_SPEED ,'movemanualspeed', 'size=2')}
 						<br><input type="checkbox" class="check_manualmovedir" ${tankidattr}>reverse   <img src='res/xbox_btn_X.svg' class="xbox_btn">
@@ -907,6 +952,9 @@ function addTank(){
 	set_inputzonebtns_callbacks(
 		nodes => tank.sendOptsSET(['move', 'auto', 'target'], [Number(nodes[0].value), Number(nodes[1].value)])
 	, 2, tankdiv, '.input_targetpos');
+	set_inputzonebtns_callbacks(
+		nodes => tank.sendOptsSET(['move', 'auto', 'trajectory'], nodes[0].value.split(',').map(part => Number(part)))
+	, 1, tankdiv, '.input_trajectory');
 	set_inputzonebtns_callbacks(nodes =>{
 		try{
 			let gamepad = navigator.getGamepads()[Number(nodes[0].value)];
@@ -939,6 +987,13 @@ function addTank(){
 	set_radiozone_callbacks(
 		(nodezone, value) => tank.toggleMarkersType(value)
 	, tankdiv, 'radio_boardtype');
+	set_radiozone_callbacks(
+		(nodezone, value) =>{
+			getdom('.move_params2', tankdiv).forEach( node => node.style.display = "none" );
+			getdom(`.${value}moveauto_params`, tankdiv)[0].style.display = 'inline';
+			tank.setMoveAutoType(value);
+		}
+	, tankdiv, 'radio_moveautomode');
 	
 	// html_sliderboxzone callbacks
 	set_sliderbox_callback(tankdiv, 'moveautospeed', value => tank.sendOptsSET(['move','auto','speed'], Number(value)));
@@ -971,6 +1026,10 @@ function addTank(){
 	});
 	getdom('.btn_addvirtobst', tankdiv)[0].addEventListener('click', function(){
 		tank.addVirtualObstacle(getdom('.input_virtcorners', this.parentNode).map( node => Number(node.value) ))
+	});
+	getdom('.btn_picktrajectory', tankdiv)[0].addEventListener('click', function(){
+		if (trajectorypicker_tank == tank) unlatch_trajectorypicker();
+		else                               latch_trajectorypicker(tank, this);
 	});
 }
 
@@ -1015,6 +1074,38 @@ function unlatch_virtobst(){
 	virtobst_tank = null;
 	drawOverlay();
 }
+
+let trajectorypicker_tank = null;
+function latch_trajectorypicker(tank, node){
+	canvas_overlay_top.style.cursor = 'crosshair';
+	getdom('.btn_picktrajectory').forEach(el => {
+		el.style.animation = 'none';
+		el.style.boxShadow = null;
+	});
+	node.style.animation = null;
+	node.style.boxShadow = 'none';
+	trajectorypicker_tank = tank;
+	mouse.last_clicks = [];
+}
+function unlatch_trajectorypicker(){
+	canvas_overlay_top.style.cursor = 'auto';
+	getdom('.btn_picktrajectory').forEach(el => {
+		el.style.animation = 'none';
+		el.style.boxShadow = null;
+	});
+	
+	let textarea = getdom(`.input_trajectory[tankid='${trajectorypicker_tank.id}']`)[0];
+	textarea.value = mouse.last_clicks.map(pos => pos.slice(0,2).join(',')).join(',');
+	textarea.dispatchEvent(new Event("input"));
+	getdom('.btn_ok', textarea.parentNode)[0].click();
+	
+	ctx.overlay3.clearRect(0, 0, canvasW, canvasH);
+	trajectorypicker_tank = null;
+	mouse.last_clicks = [];
+	
+	drawOverlay();
+}
+
 function drawOverlay(){
 	ctx.overlay.save();
 	ctx.overlay.setTransform(1, 0, 0, 1, 0, 0);
@@ -1058,22 +1149,38 @@ function drawOverlay(){
 	}
 	
 	for (let tank of tanks){
-		// draw virtual obstacles
-		for (let obstacle of tank.data.obstacles.virtual){
-			ctx.overlay.beginPath();
-			ctx.overlay.rect(obstacle[0]*pxPerM, obstacle[1]*pxPerM, (obstacle[2]-obstacle[0])*pxPerM, (obstacle[3]-obstacle[1])*pxPerM)
+		// draw trajectory
+		if (tank.data.move.auto.type == 'trajectory'){
 			ctx.overlay.strokeStyle = tank.color;
-			ctx.overlay.setLineDash([4, 4]);
-			ctx.overlay.lineWidth = 4;
+			ctx.overlay.setLineDash([2, 2]);
+			ctx.overlay.lineWidth = 5;
+			
+			let points = tank.data.move.auto.trajectory;
+			ctx.overlay.beginPath();
+			ctx.overlay.moveTo(points[0]*pxPerM, points[1]*pxPerM)
+			for (let i=2; i<points.length; i+=2) ctx.overlay.lineTo(points[i]*pxPerM, points[i+1]*pxPerM)
 			ctx.overlay.stroke();
 		}
+		
+		// draw virtual obstacles		
+		ctx.overlay.strokeStyle = tank.color;
+		ctx.overlay.setLineDash([4, 4]);
+		ctx.overlay.lineWidth = 4;
+		let virtobst = tank.data.obstacles.virtual;
+		for (let i=0; i<virtobst.length; i+=4){
+			ctx.overlay.beginPath();
+			ctx.overlay.rect(virtobst[i]*pxPerM, virtobst[i+1]*pxPerM, (virtobst[i+2]-virtobst[i])*pxPerM, (virtobst[i+3]-virtobst[i+1])*pxPerM)
+			ctx.overlay.stroke();
+		}
+		
 		// draw targets
-		let imgw = tank.pickerImg.width; 
-		let imgh = tank.pickerImg.height; 
-		ctx.overlay.drawImage(tank.pickerImg, tank.data.move.auto.target[0]*pxPerM, tank.data.move.auto.target[1]*pxPerM - imgh);
+		if (tank.data.move.auto.type == 'target'){
+			let imgw = tank.pickerImg.width; 
+			let imgh = tank.pickerImg.height; 
+			ctx.overlay.drawImage(tank.pickerImg, tank.data.move.auto.target[0]*pxPerM, tank.data.move.auto.target[1]*pxPerM - imgh);
+		}
 	}
 }
-
 
 let fps = 20;
 window.setInterval(() => {
@@ -1085,7 +1192,6 @@ window.setInterval(() => {
 	tanks.forEach( tank => tank.draw() );
 	
 }, 1000/fps)
-
 
 getdom("#btn_addtank")[0].addEventListener('click', addTank);
 
@@ -1099,6 +1205,7 @@ let convert_mouse_pos = ev =>{
 	return [ (x * invMat.a + y * invMat.c + invMat.e)/pxPerM, (x * invMat.b + y * invMat.d + invMat.f)/pxPerM, x, y ];
 };
 let mouse = {
+	last_clicks: [],
 	start_drag: null,
 	pressed: false
 };
@@ -1110,6 +1217,7 @@ canvas_overlay_top.addEventListener("mousedown", ev => {
 });
 canvas_overlay_top.addEventListener("mouseup", ev => {
 	mouse.pressed = false;
+	
 	if (mouse.start_drag != null){
 		
 		if (virtobst_tank != null){
@@ -1130,6 +1238,19 @@ canvas_overlay_top.addEventListener("mouseup", ev => {
 	}
 });
 canvas_overlay_top.addEventListener("mousemove", ev => {
+	if (mouse.last_clicks.length != 0 && trajectorypicker_tank != null){
+		ctx.overlay3.clearRect(0, 0, canvasW, canvasH);
+		ctx.overlay3.setLineDash([7, 7]);
+		ctx.overlay3.lineWidth = 2;
+		ctx.overlay3.strokeStyle = '#000000';
+		ctx.overlay3.beginPath();
+		
+		let [x, y] = convert_mouse_pos_px(ev);
+		ctx.overlay3.moveTo(x, y);
+		for (let i=mouse.last_clicks.length-1; i>=0; i--) ctx.overlay3.lineTo(mouse.last_clicks[i][2], mouse.last_clicks[i][3]);
+		ctx.overlay3.stroke();
+	}
+	
 	if (mouse.pressed){
 		if (mouse.start_drag != null && virtobst_tank != null){
 			ctx.overlay2.clearRect(0, 0, canvasW, canvasH);
@@ -1143,7 +1264,9 @@ canvas_overlay_top.addEventListener("mousemove", ev => {
 		}
 	}
 });
-canvas_overlay_top.addEventListener("click", ev => {	
+canvas_overlay_top.addEventListener("click", ev => {
+	mouse.last_clicks.push(convert_mouse_pos(ev));
+		
 	if (pospicker_tank !== null){
 		ev.preventDefault();
 		
@@ -1152,7 +1275,7 @@ canvas_overlay_top.addEventListener("click", ev => {
 		let textfields = getdom(`.input_targetpos[tankid='${pospicker_tank.id}']`);
 		textfields[0].value = x.toFixed(4);
 		textfields[1].value = y.toFixed(4);
-		textfields.forEach(el => el.dispatchEvent(new Event("input")));
+		textfields[0].dispatchEvent(new Event("input"));
 		getdom('.btn_ok', textfields[0].parentNode)[0].click();
 		
 		unlatch_targetpospicker();
@@ -1174,17 +1297,18 @@ window.addEventListener("gamepaddisconnected", ev => {
 TODO:
 	. add ability to delete specific markers from auto board
 	. add cannon behavior
-	
+		
 	. aruco coded obstacles:
 		- boxes, one marker per vertical face -> forms a board
 		- range of ids are declared in use for obstacles, another range for map positioning
 		- boxes can be registered: like auto_board
+	- unmarkerd obstacles:
+		- use cynlinders of knwon size, get bounding rect, get image corners, solvpnp
+		-> ex: cardboard roll
 
 	. add code for obstacles
-	. add ability to manually add obstacles
 	. add path computation around obstacles (A*, use vertecies of rectangle obstacles)
 	
-	. add support for multiple tanks (using different ports ?)
-	. canvas add axes
+	. add support for multiple tanks (using different ports ?) (using udp broadcast to set ports ?)
 	. use input type number
 */
