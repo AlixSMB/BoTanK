@@ -193,6 +193,8 @@ def send_auto_markers():
 	cornersAll = list(data['markers']['auto'].cells.values())
 	for i in range(len(mids)) : msg += str(mids[i]) + ";;" + str.join(';', [str.join(',', [str(el) for el in corner]) for corner in cornersAll[i]]) + '\n';
 	net.server_opts.send( (msg+'\n').encode('ascii') )
+def send_current_trajpnt():
+	net.server_opts.send( f"SETCURRENTTRAJPNT\n{data['move']['auto']['current_trajpnt'].val}\n\n".encode('ascii') )
 # update data from coms channel (remote)
 def update_data(self, val):
 	self.val = val
@@ -223,44 +225,63 @@ def update_markers(self, mtype, mids, cornersAll):
 def update_auto_markers_size(self, msize):
 	self.val = msize
 	reset_auto_board()
+def update_current_trajpnt(ind):
+	# tank has reached last point
+	if pid*2 == len(data['move']['auto']['trajectory'].val) : stopMoveAuto()
+	else:
+		self.val = ind
+		send_current_trajpnt()
 
 def set_move_vel(vel):
 	vel[1] *= -1
 	data['move']['real']['vel'].val = vel
 	kit.motor1.throttle = 0.9 if vel[0] > 0.9 else (-0.9 if vel[0] < -0.9 else vel[0]) 
 	kit.motor2.throttle = 0.9 if vel[1] > 0.9 else (-0.9 if vel[1] < -0.9 else vel[1])
-def startMoveAuto():
-	if data['move']['auto']['on'].val : data['move']['auto']['run'] = True
-def stopMoveAuto():
-	data['move']['auto']['run'] = False
-	set_move_vel([0,0])
-def auto_move():
-	if not data['move']['auto']['run'] or transfo == None : return
+
+minDistTarget = 0.03 # 3cm around target means the destination is reached
+slowDownDist = 0.08 # start slowing down at this distance to target
+def auto_goto_point(target, speed):
+	dirTarget = [target[0]-transfo[0][0], target[1]-transfo[0][1]]
+	distTarget = math.sqrt( dirTarget[0]**2 + dirTarget[1]**2 )
 	
-	target = data['move']['auto']['target'].val
-	speed = data['move']['auto']['speed'].val
+	if distTarget <= minDistTarget : return True # we have arrived at target
+	
+	# slow down if near target
+	#if distTarget >= slowDownDist : speed = min( speed, max(0.15, distTarget/slowDownDist*0.5) )
 	
 	# X, Y axes of tank
 	tankY = transfo[1]
 	tmp = tankY[0]**2 + tankY[1]**2
 	tankX = [tankY[1]/tmp, -tankY[0]/tmp]
 	# projection of target on those axes
-	dirTarget = [target[0]-transfo[0][0], target[1]-transfo[0][1]]
 	targetX = dirTarget[0]*tankX[0] + dirTarget[1]*tankX[1]
 	targetY = dirTarget[0]*tankY[0] + dirTarget[1]*tankY[1]
-	norm = math.sqrt(targetX**2 + targetY**2)
-	velX = targetX/norm ; velY = targetY/norm
-	
-	# doesn't work...
-	# in camera coords (we use the transformation matrix)
-	#vel = np.matmul(transfo[2], np.array([target[0],target[1],0,1], dtype=np.float32))[:2]
-	#vel /= np.linalg.norm(vel)
+	velX = targetX/distTarget ; velY = targetY/distTarget
 	
 	# almost same as the corresponding gamepad javascript code
 	velX *= speed ; velY *= speed
 	angle = math.atan2(velY, velX)
 	if angle >= -math.pi/2 and angle <= math.pi/2 : set_move_vel([velY, speed])
 	else                                          : set_move_vel([speed, velY])
+	
+	return False # not at target yet
+def startMoveAuto():
+	if data['move']['auto']['on'].val : data['move']['auto']['run'] = True
+	if data['move']['auto']['type'].val == 'trajectory':
+		data['move']['auto']['current_trajpnt'].val = 0
+		send_current_trajpnt()
+def stopMoveAuto():
+	data['move']['auto']['run'] = False
+	set_move_vel([0,0])
+def auto_move():
+	if not data['move']['auto']['run'] or transfo == None : return
+	
+	if data['move']['auto']['type'].val == 'target':
+		if auto_goto_point(data['move']['auto']['target'].val, data['move']['auto']['speed'].val) : stopMoveAuto()
+	else: # trajectory
+		ind = data['move']['auto']['current_trajpnt'].val
+		if auto_goto_point(data['move']['auto']['trajectory'].val[ind*2:(ind+1)*2], data['move']['auto']['speed'].val):
+			data['move']['auto']['trajectory'].onchange(ind+1)
 
 def reset_auto_board():
 	global current_mobj
@@ -290,8 +311,14 @@ data = {
 		},
 		'auto': { # automatic mode
 			'on': Object(val=False, onchange=toggle_move_auto),
+			'type': Object(val='target', onchange=update_data),
+			
 			'run': False,
+			
 			'target': Object(val=[0,0], onchange=update_data),
+			'trajectory': Object(val=[], onchange=update_data),
+			'current_trajpnt': Object(val=0, onchange=update_current_trajpnt), # start point and end point of this segment
+			
 			'speed': Object(val=0.3, onchange=update_data) 
 		}
 	},
@@ -313,6 +340,9 @@ data = {
 		'auto': newAutoBoard(),
 		
 		'grid': Object(cells={}, board=None, onchange=update_markers) 
+	},
+	'obstacles': {
+		'virtual': Object(val=[], onchange=update_data)
 	}
 };
 
