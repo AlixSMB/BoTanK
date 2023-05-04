@@ -12,6 +12,16 @@ const ARUCO_GRID_NBH = 5;
 const ARUCO_GRID_CSIZE = 0.0366; // cell size in meters
 const ARUCO_GRID_CMARGIN = ARUCO_GRID_CSIZE;
 
+// default marked obstacles size
+const ARUCO_OBST_SIZE = 0.05; // m
+const DEFAULT_NBMARKERS_PER_OBST = 6;
+const DEFAULT_MARKEDOBST_COLLIDERS = ['AABB', 'Sphere'];
+const DEFAULT_MARKEDOBST_COLLIDER = 'AABB';
+
+// default marker ids
+const DEFAULT_MIDRANGE_POSITIONING = [0, 200];
+const DEFAULT_MIDRANGE_OBST = [201, 249];
+
 // default speeds
 const DEFAULT_MOVEAUTO_SPEED = 0.3;
 const DEFAULT_MOVEMANUAL_SPEED = 0.3;
@@ -423,6 +433,7 @@ class Tank{
 				type: 'auto',
 				
 				disp_ids: false,
+				ids_range: DEFAULT_MIDRANGE_POSITIONING,
 				
 				auto_s: 0.035,
 				auto: {
@@ -435,7 +446,16 @@ class Tank{
 				}
 			},
 			obstacles: {
-				virtual: []
+				virtual: {
+					rects: []
+				},
+				marked: {
+					obj: [],
+					ids_range: DEFAULT_MIDRANGE_OBST,
+					s: ARUCO_OBST_SIZE,
+					n: DEFAULT_NBMARKERS_PER_OBST,
+					collider: DEFAULT_MARKEDOBST_COLLIDER
+				}
 			}
 		};
 		
@@ -801,14 +821,20 @@ class Tank{
 	}
 	
 	addVirtualObstacle(vals){ // vals = [cornerTLx, cornerTLy, cornerBRx, cornerBRy]
-		this.data.obstacles.virtual.push(...vals);
-		this.sendOptsSET(['obstacles', 'virtual']);
+		this.data.obstacles.virtual.rects.push(...vals);
+		this.sendOptsSET(['obstacles', 'virtual', 'rects']);
+		drawOverlay();
+	}
+	delVirtualObstacle(ind){
+		this.data.obstacles.virtual.rects.splice(ind, 4);
+		this.sendOptsSET(['obstacles', 'virtual', 'rects']);
 		drawOverlay();
 	}
 	
 	draw(){
 		ctx.main.fillStyle = this.color;
 		
+		// draw tank
 		if (tank_centered && tank_centerid == this.id){
 			ctx.main.setTransform(
 				this.data.move.real.dir[0], this.data.move.real.dir[1], -this.data.move.real.dir[1], this.data.move.real.dir[0],
@@ -830,6 +856,23 @@ class Tank{
 			ctx.main.fill(this.path);
 			ctx.main.restore();
 		}
+		
+		// draw marked obstacles
+		ctx.main.save();
+		ctx.overlay.strokeStyle = this.color;
+		ctx.overlay.lineWidth = 4;
+		let obj = this.data.obstacles.marked.obj;
+		if (this.data.obstacles.marked.collider == 'AABB'){
+			for (let i=0; i<obj.length; i+=4){
+				ctx.main.beginPath();
+				ctx.main.rect(obj[i]*pxPerM, obj[i+1]*pxPerM, (obj[i+2]-obj[i])*pxPerM, (obj[i+3]-obj[i+1])*pxPerM);
+				ctx.main.stroke();
+			}
+		}
+		else{ // Sphere
+			
+		}
+		ctx.main.restore();
 	}
 	
 	dispmsg(msg){
@@ -894,20 +937,26 @@ function addTank(){
 				<summary>Markers</summary>
 				Type: ${html_radiozone("radio_boardtype", ["grid", "auto"], tank.data.markers.type == 'auto' ? 1 : 0, tankidattr)}
 				<div class="markers_params_container">
-					<input type="checkbox" class="check_displayids" ${tank.data.markers.disp_ids ? "checked" : ""}>Display IDs<br>
+					<input type="checkbox" class="check_displayids" ${tank.data.markers.disp_ids ? "checked" : ""}>Display IDs
+					<br>IDs range (inclusive): ${html_inputzone(
+						2, 'input_posmarkersidrange',
+						DEFAULT_MIDRANGE_POSITIONING,
+						repeat(2, tankidattr+' size=2'),
+						'<b> - </b>'
+					)}<br><br>
 					<div class="markers_params grid_params" ${tankidattr} style="display:${tank.data.markers.type == 'grid' ? 'inline' : 'none'}">
 						Nb. W: ${html_inputzone(
 							4, 'input_gridparams',
 							[ARUCO_GRID_NBW, ARUCO_GRID_NBH, ARUCO_GRID_CSIZE, ARUCO_GRID_CMARGIN],
 							repeat(4, tankidattr+' size=2'),
-							['   Nb. H: ', '<br>Cell size: ', '   Cell margin: ']
-						)}
+							['   Nb. H: ', '<br>Cell size: ', 'm   Cell margin: ']
+						)}m
 					</div>
 					<div class="markers_params auto_params" ${tankidattr} style="display:${tank.data.markers.type == 'auto' ? 'inline' : 'none'}">
 						Cell size: ${html_inputzone(
 							1, 'input_autoparams',
 							[ARUCO_GRID_CSIZE], [tankidattr+' size=2']
-						)}
+						)}m
 						<br><button class="btn_addmarkers">Add markers <img src='res/xbox_btn_Y.svg' class="xbox_btn"></button>
 						<input type="button" class="btn_resetmarkers" value="Reset markers"><br>
 						<span class="nb_markers">0</span> markers found
@@ -924,7 +973,28 @@ function addTank(){
 					<br><input type="button" class="btn_addvirtobst" value="Add obstacle">
 					<br><br>
 					<input type="button" class="btn_delvirtobst" value="Remove obstacle"> id n°${html_inputzone(1, 'input_delvirtobst', [0], [tankidattr+' size=1'])}
-				</details>	
+				</details>
+				<details style="margin-left: 1rem;">
+					<summary>Marked</summary>
+					<div style="max-width: 15rem;">
+						N markers per obstacle, marker ids per obstacle should all be the same
+					</div>
+					<br>IDs range (inclusive): ${html_inputzone(
+						2, 'input_obstmarkersidrange',
+						tank.data.obstacles.marked.ids_range,
+						repeat(2, tankidattr+' size=2'),
+						'<b> - </b>'
+					)}
+					<br>Markers per obstacle: ${html_inputzone(
+						1, 'input_obstnbmarkers',
+						[tank.data.obstacles.marked.n], [tankidattr+' size=2']
+					)}
+					<br>Cell size: ${html_inputzone(
+						1, 'input_markedobst_size',
+						[tank.data.obstacles.marked.s], [tankidattr+' size=2']
+					)}m (including white margin)
+					<br><br>Collider: ${html_radiozone("radio_markedobstmode", DEFAULT_MARKEDOBST_COLLIDERS, DEFAULT_MARKEDOBST_COLLIDERS.indexOf(tank.data.obstacles.marked.collider), tankidattr)}
+				</details>
 			</details>	
 			<br>
 			<div>
@@ -972,6 +1042,18 @@ function addTank(){
 	set_inputzonebtns_callbacks(
 		nodes => tank.sendOptsSET(['markers', 'auto_s'], Number(nodes[0].value))
 	, 1, tankdiv, '.input_autoparams');
+	set_inputzonebtns_callbacks(
+		nodes => tank.sendOptsSET(['markers', 'ids_range'], nodes.map(node => Number(node.value)))
+	, 1, tankdiv, '.input_posmarkersidrange');
+	set_inputzonebtns_callbacks(
+		nodes => tank.sendOptsSET(['obstacles', 'marked', 'ids_range'], nodes.map(node => Number(node.value)))
+	, 1, tankdiv, '.input_obstmarkersidrange');
+	set_inputzonebtns_callbacks(
+		nodes => tank.sendOptsSET(['obstacles', 'marked', 's'], Number(nodes[0].value))
+	, 1, tankdiv, '.input_markedobst_size');
+	set_inputzonebtns_callbacks(
+		nodes => tank.sendOptsSET(['obstacles', 'marked', 'n'], Number(nodes[0].value))
+	, 1, tankdiv, '.input_obstnbmarkers');
 	
 	// html_radiozone callbacks
 	set_radiozone_callbacks(
@@ -994,6 +1076,9 @@ function addTank(){
 			tank.setMoveAutoType(value);
 		}
 	, tankdiv, 'radio_moveautomode');
+	set_radiozone_callbacks(
+		(nodezone, value) => tank.sendOptsSET(['obstacles', 'marked', 'collider'], value)
+	, tankdiv, 'radio_markedobstmode');
 	
 	// html_sliderboxzone callbacks
 	set_sliderbox_callback(tankdiv, 'moveautospeed', value => tank.sendOptsSET(['move','auto','speed'], Number(value)));
@@ -1026,6 +1111,9 @@ function addTank(){
 	});
 	getdom('.btn_addvirtobst', tankdiv)[0].addEventListener('click', function(){
 		tank.addVirtualObstacle(getdom('.input_virtcorners', this.parentNode).map( node => Number(node.value) ))
+	});
+	getdom('.btn_delvirtobst', tankdiv)[0].addEventListener('click', function(){
+		tank.delVirtualObstacle(Number(getdom('.input_delvirtobst', this.parentNode)[0].value))
 	});
 	getdom('.btn_picktrajectory', tankdiv)[0].addEventListener('click', function(){
 		if (trajectorypicker_tank == tank) unlatch_trajectorypicker();
@@ -1166,11 +1254,14 @@ function drawOverlay(){
 		ctx.overlay.strokeStyle = tank.color;
 		ctx.overlay.setLineDash([4, 4]);
 		ctx.overlay.lineWidth = 4;
-		let virtobst = tank.data.obstacles.virtual;
+		ctx.overlay.font = `30px sans serif`;
+		let virtobst = tank.data.obstacles.virtual.rects;
 		for (let i=0; i<virtobst.length; i+=4){
 			ctx.overlay.beginPath();
-			ctx.overlay.rect(virtobst[i]*pxPerM, virtobst[i+1]*pxPerM, (virtobst[i+2]-virtobst[i])*pxPerM, (virtobst[i+3]-virtobst[i+1])*pxPerM)
+			let [x1, y1] = [virtobst[i]*pxPerM, virtobst[i+1]*pxPerM];
+			ctx.overlay.rect(x1, y1, (virtobst[i+2]-virtobst[i])*pxPerM, (virtobst[i+3]-virtobst[i+1])*pxPerM);
 			ctx.overlay.stroke();
+			ctx.overlay.fillText(i, x1+15, y1+30);
 		}
 		
 		// draw targets
@@ -1296,19 +1387,7 @@ window.addEventListener("gamepaddisconnected", ev => {
 /*
 TODO:
 	. add ability to delete specific markers from auto board
-	. add cannon behavior
-		
-	. aruco coded obstacles:
-		- boxes, one marker per vertical face -> forms a board
-		- range of ids are declared in use for obstacles, another range for map positioning
-		- boxes can be registered: like auto_board
-	- unmarkerd obstacles:
-		- use cynlinders of knwon size, get bounding rect, get image corners, solvpnp
-		-> ex: cardboard roll
-
-	. add code for obstacles
-	. add path computation around obstacles (A*, use vertecies of rectangle obstacles)
-	
+	. add cannon behavior	
 	. add support for multiple tanks (using different ports ?) (using udp broadcast to set ports ?)
 	. use input type number
 */
