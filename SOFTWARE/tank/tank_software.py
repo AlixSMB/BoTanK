@@ -1,7 +1,7 @@
 # Note for windows CMD: if QuickEdit mode is enabled, clicking the console freezes the script until a keyboard key is pressed... 
 
 from util import * # util.py
-from positioning import getBoardTransform, auto_make_board, sdf_rect # positioning.py
+from positioning import getBoardTransform, auto_make_board # positioning.py
 
 import cv2
 from cv2 import aruco
@@ -152,7 +152,10 @@ def recv_opts_data(server):
 		elif lines[0] == 'DO':
 			
 			if lines[1] == 'SNAPAUTOBOARD':
-				if auto_make_board(cameradata, camera_frame, data['markers']['auto'], data['markers']['auto_s'].val, aruco_dict):
+				if auto_make_board(
+					cameradata, camera_frame, data['markers']['auto'], 
+					data['markers']['auto_s'].val, aruco_dict, data['markers']['ids_range'].val
+				):
 					send_auto_markers()
 				server.send(b'OK\n\n')
 			
@@ -177,6 +180,7 @@ def recv_opts_data(server):
 			server.send(b'ERR\n\n')
 def send_move_data(server):	
 	msg = ''
+	
 	for key1 in ['move', 'cannon']:
 		part = data[key1]['real']
 		for key2 in part:
@@ -186,6 +190,9 @@ def send_move_data(server):
 			else:
 				if isinstance(obj.val, (list, np.ndarray)) : msg += f"{key1},real,{key2};{ ','.join([str(el) for el in obj.val]) }\n"
 				else                         : msg += f"{key1},real,{key2};{str(obj.val)}\n"
+	
+	msg += f"obstacles,marked,obj;{ ','.join([str(el) for el in data['obstacles']['marked']['obj']]) }\n"
+	
 	server.send(msg.encode('ascii'))
 def send_auto_markers():
 	msg = "SETAUTOMARKERS\n"
@@ -222,6 +229,9 @@ def update_markers_type(self, mtype):
 def update_markers(self, mtype, mids, cornersAll):
 	for i in range(len(mids)) : self.cells[mids[i]] = cornersAll[i]
 	self.board = aruco.Board_create(np.asarray(list(self.cells.values()), np.float32), aruco_dict, np.asarray(list(self.cells.keys()), int))
+def update_pos_markers_range(self, mrange):
+	self.val = mrange
+	reset_auto_board()
 def update_auto_markers_size(self, msize):
 	self.val = msize
 	reset_auto_board()
@@ -231,6 +241,9 @@ def update_current_trajpnt(ind):
 	else:
 		self.val = ind
 		send_current_trajpnt()
+def update_obst_markers_range(self, mrange):
+	self.val = mrange
+	reset_auto_board()
 
 def set_move_vel(vel):
 	vel[1] *= -1
@@ -240,7 +253,7 @@ def set_move_vel(vel):
 
 minDistTarget = 0.03 # 3cm around target means the destination is reached
 slowDownDist = 0.08 # start slowing down at this distance to target
-def auto_goto_point(target, speed):
+def auto_goto_point(target):
 	dirTarget = [target[0]-transfo[0][0], target[1]-transfo[0][1]]
 	distTarget = math.sqrt( dirTarget[0]**2 + dirTarget[1]**2 )
 	
@@ -256,10 +269,31 @@ def auto_goto_point(target, speed):
 	# projection of target on those axes
 	targetX = dirTarget[0]*tankX[0] + dirTarget[1]*tankX[1]
 	targetY = dirTarget[0]*tankY[0] + dirTarget[1]*tankY[1]
-	velX = targetX/distTarget ; velY = targetY/distTarget
+	velX = targetX*speed/distTarget ; velY = targetY*speed/distTarget
+	
+	speed = data['move']['auto']['speed'].val
+	
+	# influence of obstacles on vel
+	rects = data['obstacles']['virtual']['rects'].val # rectangular virtual obstacles
+	w = data['obstacles']['virtual']['w']*speed # obstacle weight
+	for i in range(len(rects)):
+		# point on rect surface closest to tank
+		origX = max(rects[i], min(transfo[0][0], rects[i+2]))
+		origY = max(rects[i+1], min(transfo[0][1], rects[i+3]))
+		
+		rectdirX = transfo[0][0] - origX
+		rectdirY = transfo[0][1] - origY
+		rectdist = math.sqrt(rectdirX**2 + rectdirY**2)
+		rectdirX /= rectdist
+		rectdirY /= rectdist
+		
+		velX += rectdirX * w/rectdist # influence of obstacle is inversly
+		velY += rectdirY * w/rectdist # proportional to distance
+		veldist = math.sqrt(velX**2 + velY**2)
+		velX *= speed/veldist
+		velY *= speed/veldist
 	
 	# almost same as the corresponding gamepad javascript code
-	velX *= speed ; velY *= speed
 	angle = math.atan2(velY, velX)
 	if angle >= -math.pi/2 and angle <= math.pi/2 : set_move_vel([velY, speed])
 	else                                          : set_move_vel([speed, velY])
@@ -274,13 +308,13 @@ def stopMoveAuto():
 	data['move']['auto']['run'] = False
 	set_move_vel([0,0])
 def auto_move():
-	if not data['move']['auto']['run'] or transfo == None : return
+	if not data['move']['auto']['run'] : return
 	
 	if data['move']['auto']['type'].val == 'target':
-		if auto_goto_point(data['move']['auto']['target'].val, data['move']['auto']['speed'].val) : stopMoveAuto()
+		if auto_goto_point(data['move']['auto']['target'].val) : stopMoveAuto()
 	else: # trajectory
 		ind = data['move']['auto']['current_trajpnt'].val
-		if auto_goto_point(data['move']['auto']['trajectory'].val[ind*2:(ind+1)*2], data['move']['auto']['speed'].val):
+		if auto_goto_point(data['move']['auto']['trajectory'].val[ind*2:(ind+1)*2]):
 			data['move']['auto']['trajectory'].onchange(ind+1)
 
 def reset_auto_board():
@@ -336,13 +370,25 @@ data = {
 	'markers': {
 		'type': Object(val='auto', onchange=update_markers_type),
 		
-		'auto_s': Object(val=0.035, onchange=update_auto_markers_size), # 5 centimeters by default, modifiable by control panel
+		'ids_range': Object(val=[0, 200], onchange=update_pos_markers_range),
+		
+		'auto_s': Object(val=0.035, onchange=update_auto_markers_size), # 3.5 centimeters by default, modifiable by control panel
 		'auto': newAutoBoard(),
 		
 		'grid': Object(cells={}, board=None, onchange=update_markers) 
 	},
 	'obstacles': {
-		'virtual': Object(val=[], onchange=update_data)
+		'virtual': {
+			'rects': Object(val=[], onchange=update_data),
+			'w': 30, # "weight" of virtual obstacle
+		},
+		'marked': {
+			'obj': [],
+			'ids_range': Object(val=[201, 249], onchange=update_obst_markers_range),
+			'w': 30,
+			's': Object(val=0.05, onchange=update_data),
+			'n': Object(val=6, onchange=update_data), # max number of markers per obstacle
+			'collider': Object(val='AABB', onchange=update_data) # bounding shape of the obstacles
 	}
 };
 
@@ -373,6 +419,12 @@ while True:
 			if transfo is not None:
 				data['move']['real']['pos'].val = transfo[0][:2]
 				data['move']['real']['dir'].val = transfo[1]
+				
+				data['obstacles']['marked']['obj'] = getMarkedObstacles(
+					cameradata, camera_frame, aruco_dict, 
+					data['obstacles']['marked']['ids-range'].val, data['obstacles']['marked']['s'].val, 
+					data['obstacles']['marked']['n'].val, data['obstacles']['marked']['collider'].val, transfo
+				)
 				if data['move']['auto']['on'].val : auto_move()
 	
 	# stream camera
@@ -400,10 +452,14 @@ while True:
 
 # TODO:
 
-#	- Obstacle avoidance:
-#		- use A* algo on edges of obstacle rectangles
-#		- have the obstacle apply a force
-#	- Ajouter code obstacles (obstacles via camera + ajout manuel via interface)
+#	- Ajouter code obstacles via camera
+#	- aruco coded obstacles:
+#		- boxes, one marker per vertical face -> forms a board
+#		- range of ids are declared in use for obstacles, another range for map positioning
+#		- boxes can be registered: like auto_board
+#	- unmarkerd obstacles:
+#		- use cynlinders of knwon size, get bounding rect, get image corners, solvpnp
+#		-> ex: cardboard roll
 #	- use getBoardObjectAndImagePoints and solvePnP instead of estimatePoseBoard ?
 # 	- optimize code:
 #		- for ... in list(...dict...)

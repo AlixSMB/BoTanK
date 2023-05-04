@@ -11,6 +11,27 @@ detect_params = aruco.DetectorParameters_create()
 #estimate_param = aruco.EstimateParameters.create()
 #estimate_param.pattern = aruco.CW_top_left_corner
 
+def getTransformationMatrix(rvec, tvec, rmat=None):    # rvec and tvec straight from opencv function (with the weird shapes)
+	# get rotation matrix from rotation vector
+	rmat = cv2.Rodrigues(rvec)[0] if rmat is None else rmat
+	transfo = np.zeros((4,4), np.float32)
+	transfo[3,3] = 1
+	transfo[0:3, 0:3] = rmat
+	transfo[0:3, 3] = np.squeeze(tvec)
+	return transfo
+def getInvTransformationMatrix(rvec, tvec, rmat=None): #
+	# get rotation matrix from rotation vector
+	rmat = cv2.Rodrigues(rvec)[0] if rmat is None else rmat
+	# get inverse of rotation matrix: inv(R) = transpose(R)
+	invRMat = np.transpose(rmat)
+	# get inverse of tranformation matrix (rotation + translation)
+	# we use a fast method: https://stackoverflow.com/questions/2624422/efficient-4x4-matrix-inverse-affine-transform
+	invTransfo = np.zeros((4,4), np.float32)
+	invTransfo[3,3] = 1
+	invTransfo[0:3, 0:3] = invRMat
+	invTransfo[0:3, 3] = np.matmul(-invRMat, np.squeeze(tvec))
+	return invTransfo
+
 def update_marker_refs(m_obj, marker_i, local_corners, isGlobalOrig): # called when marker gets positioned relative to a new origin marker
 	for refmarker_id in marker_i.in_refs: # update markers whose position is based on this one's
 		refmarker_i = m_obj.cells_i[refmarker_id]
@@ -32,7 +53,7 @@ def update_marker_refs(m_obj, marker_i, local_corners, isGlobalOrig): # called w
 # all the markers must have the same known size
 # "m_obj.cells" will contain all the markers which are positioned relative to the board origin marker
 # (i.e: the marker with the smallest id)
-def auto_make_board(cameradata, videoframe, m_obj, ms, dictio):
+def auto_make_board(cameradata, videoframe, m_obj, ms, dictio, mrange=[0,200]):
 	newMarkers = False
 	corners, ids, rejectedCorners = aruco.detectMarkers(videoframe, dictio, parameters=detect_params)
 	if ids is not None and len(ids) > 1:
@@ -42,6 +63,7 @@ def auto_make_board(cameradata, videoframe, m_obj, ms, dictio):
 		#local_corners = np.array([[0,0,0,1],[0,ms,0,1],[ms,ms,0,1],[ms,0,0,1]], dtype=np.float32) # CCW order [x,y,z,1]*4
 		
 		for mid in ids[:,0]:
+			if mid < mrange[0] or mid > mrange[1] : continue # not a marker used for positioning 
 			if not (mid in m_obj.cells_tmp): # discovered new marker
 				newMarkers = True
 				m_obj.cells_tmp[mid] = local_corners[:,:3].copy() # corner pos relative to ref (which should be origin marker once mapping is done)
@@ -69,6 +91,7 @@ def auto_make_board(cameradata, videoframe, m_obj, ms, dictio):
 			
 			for i in range(len(ids)):
 				mid = ids[i][0]
+				if mid < mrange[0] or mid > mrange[1] : continue
 				if mid == orig_id : continue
 				marker_i = m_obj.cells_i[mid]
 				if marker_i.out_ref is not None : continue # this marker is already positioned
@@ -93,27 +116,6 @@ def auto_make_board(cameradata, videoframe, m_obj, ms, dictio):
 		#	cv2.drawFrameAxes(videoframe, cameradata['matrix'], cameradata['coeffs'], rvecs[i], tvecs[i], 0.035)
 	
 	return newMarkers
-
-def getTransformationMatrix(rvec, tvec, rmat=None):    # rvec and tvec straight from opencv function (with the weird shapes)
-	# get rotation matrix from rotation vector
-	rmat = cv2.Rodrigues(rvec)[0] if rmat is None else rmat
-	transfo = np.zeros((4,4), np.float32)
-	transfo[3,3] = 1
-	transfo[0:3, 0:3] = rmat
-	transfo[0:3, 3] = np.squeeze(tvec)
-	return transfo
-def getInvTransformationMatrix(rvec, tvec, rmat=None): #
-	# get rotation matrix from rotation vector
-	rmat = cv2.Rodrigues(rvec)[0] if rmat is None else rmat
-	# get inverse of rotation matrix: inv(R) = transpose(R)
-	invRMat = np.transpose(rmat)
-	# get inverse of tranformation matrix (rotation + translation)
-	# we use a fast method: https://stackoverflow.com/questions/2624422/efficient-4x4-matrix-inverse-affine-transform
-	invTransfo = np.zeros((4,4), np.float32)
-	invTransfo[3,3] = 1
-	invTransfo[0:3, 0:3] = invRMat
-	invTransfo[0:3, 3] = np.matmul(-invRMat, np.squeeze(tvec))
-	return invTransfo
 
 # get pos / rot of camera relative to board, the video frame should be distorsion free ! 
 maxPosDelta = 0.1 # in m
@@ -154,12 +156,49 @@ def getBoardTransform(cameradata, videoframe, board, dictio, transfo=None):
 			# project unto (x,y) plane of board
 			cam_forward[:2] /= np.linalg.norm(cam_forward[:2])
 			
-			return (cam_pos, cam_forward[:2], newTransfo)
+			return (cam_pos, cam_forward[:2], newTransfo, invTransfo)
 		else : return None
 	else : return None
 
-# "Signed distance functions" like, but returns direction vector not just distance
-def sdf_rect(p1x, p1y, r1x, r1y, r2x, r2y) : return [max(r1x, min(px, r2x)), max(r1y, min(py, r2y))]
+def getMarkedObstacles(cameradata, videoframe, dictio, mrange, s, n, collider, transfo):
+	corners, ids, rejectedCorners = aruco.detectMarkers(videoframe, dictio, parameters=detect_params)
+	if ids is not None and len(corners) > 0:
+		
+		keptIds = [ mid[0] for mid in ids if mid[0] >= mrange[0] and mid[0] <= mrange[1] ]
+		if len(keptIds) == 0 : return
+		
+		rvecs, tvecs, objpoints = aruco.estimatePoseSingleMarkers(np.array(keptCorners, dtype=np.float32), s, cameradata['matrix'], cameradata['coeffs'])
+		
+		# group markers together if they are part of the same obstacle (same id)
+		for i in range(len(inds)) : 
+			if not inds[i][0] in keptIds : continue
+			if not inds[i][0] in grouped_inds : grouped_inds[inds[i][0]] = []
+			grouped_inds[inds[i][0]].append(i)
+		
+		# express corners in camera coords
+		local_corners = np.array([[-s/2,s/2,0,1],[s/2,s/2,0,1],[s/2,-s/2,0,1],[-s/2,-s/2,0,1]], dtype=np.float32) # CW center order [x,y,z,1]*4
+		cam_points = []
+		for inds in grouped_inds.values():
+			cam_points.append([]) # new object
+			for ind in inds:
+				marker_transfo = np.matmul(transfo[3], getTransformationMatrix(rvecs[ind], tvecs[ind])) # marker -> camera -> board
+				for i in range(4) : cam_points[-1].append( np.matmul(marker_transfo, local_corners[i])[:3] )
+		
+		# generate 2D colliders for obstacles
+		obstacles = []
+		if collider == 'AABB':
+			for obj_pnts in cam_points:
+				minX, minY = 999999
+				maxX, maxY = 999999
+				# don't care about z
+				for pnt in obj_pnts:
+					maxX = max(maxX, pnt[0] ; minX = min(minX, pnt[0])
+					maxY = max(maxY, pnt[1] ; minY = min(minY, pnt[1])
+				obstacles.append(minX, minY, maxX, maxY)
+		else: # Sphere
+			pass
+		
+		return obstacles
 
 # For testing
 #import pickle
@@ -203,5 +242,6 @@ def sdf_rect(p1x, p1y, r1x, r1y, r2x, r2y) : return [max(r1x, min(px, r2x)), max
 #loop()
 
 # TODO:
+# check that positioning with the presence of markers not in board still works
 # - allow different sized markers, provide size for each marker
 # - try to reuse last tvec,rvec as guess for pos. estimation ?
