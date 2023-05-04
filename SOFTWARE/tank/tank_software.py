@@ -251,6 +251,55 @@ def set_move_vel(vel):
 	kit.motor1.throttle = 0.9 if vel[0] > 0.9 else (-0.9 if vel[0] < -0.9 else vel[0]) 
 	kit.motor2.throttle = 0.9 if vel[1] > 0.9 else (-0.9 if vel[1] < -0.9 else vel[1])
 
+# sdf_vect_* return direction and signed distance 
+def sdf_vect_rect(r, px,py): # rotated rectangle
+	# local axes of rect.
+	let rX = [rects[i+6]-rects[i], rects[i+7]-rects[i+1]];
+	let rXdist = Math.sqrt(rX[0]**2 + rX[1]**2);
+	rX[0] /= rXdist; rX[1] /= rXdist;
+	let rY = [rects[i+2]-rects[i], rects[i+3]-rects[i+1]];
+	let rYdist = Math.sqrt(rY[0]**2 + rY[1]**2);
+	rY[0] /= rYdist; rY[1] /= rYdist;
+	// project point to rect. coords
+	let rectPntDir = [pos[0]-rects[i], pos[1]-rects[i+1]];
+	let projPosX = rectPntDir[0]*rX[0] + rectPntDir[1]*rX[1];
+	let projPosY = rectPntDir[0]*rY[0] + rectPntDir[1]*rY[1];
+	// same as axis aligned sdf_vect for rectangles, but we project orig back from local rect. coords to global coords
+	// orig_local => rectO + a*rectX + b*rectY
+	let local_orig = [clamp(0, rXdist, projPosX), clamp(0, rYdist, projPosY)];
+	let orig = [ 
+		rects[i]   + local_orig[0]*rX[0] + local_orig[1]*rY[0],
+		rects[i+1] + local_orig[0]*rX[1] + local_orig[1]*rY[1]
+	];
+	ctx.fillRect(orig[0]-3, orig[1]-3, 6, 6);
+	
+	let rectdir = [pos[0]-orig[0], pos[1]-orig[1]];
+	let rectdist = Math.sqrt( rectdir[0]**2 + rectdir[1]**2 );
+	rectdir[0] /= rectdist; rectdir[1] /= rectdist;
+def sdf_vect_circ(cx,cy,r, px,py):
+	# point on circle surface closest to pos
+	circleDir = [px-cx, py-cy]
+	circleDist = math.sqrt(circleDir[0]**2 + circleDir[1]**2)
+	circleDir[0] /= circleDist ; circleDir[1] /= circleDist
+	return (circleDir, circleDist-r)
+def sdf_vect_line(l1x,l1y, l2x,l2y, px,py):
+	linePntDir = [px-l1x, py-l1y]
+	lineAxis = [l2x-l1x, l2y-l1y]
+	lineSize = math.sqrt( lineAxis[0]**2 + lineAxis[1]**2 )
+	lineAxis[0] /= lineSize ; lineAxis[1] /= lineSize
+	
+	projPos = linePntDir[0]*lineAxis[0] + linePntDir[1]*lineAxis[1]
+	local_orig = clamp(0, lineSize, projPos)
+	
+	orig = [
+		l1x + lineAxis[0]*local_orig,
+		l1y + lineAxis[1]*local_orig
+	]
+	lineDir = [px-orig[0], py-orig[1]]
+	lineDist = math.sqrt( lineDir[0]**2 + lineDir[1]**2 )
+	lineDir[0] /= lineDist ; lineDir[1] /= lineDist
+	return (lineDir, lineDist)
+
 minDistTarget = 0.03 # 3cm around target means the destination is reached
 slowDownDist = 0.08 # start slowing down at this distance to target
 def auto_goto_point(target):
@@ -273,6 +322,7 @@ def auto_goto_point(target):
 	
 	speed = data['move']['auto']['speed'].val
 	
+	# TODO: rotated rectangle and lines
 	# influence of obstacles on vel
 	rects = data['obstacles']['virtual']['rects'].val # rectangular virtual obstacles
 	w = data['obstacles']['virtual']['w']*speed # obstacle weight
@@ -299,6 +349,7 @@ def auto_goto_point(target):
 	else                                          : set_move_vel([speed, velY])
 	
 	return False # not at target yet
+	
 def startMoveAuto():
 	if data['move']['auto']['on'].val : data['move']['auto']['run'] = True
 	if data['move']['auto']['type'].val == 'trajectory':
@@ -380,6 +431,7 @@ data = {
 	'obstacles': {
 		'virtual': {
 			'rects': Object(val=[], onchange=update_data),
+			'lines': Object(val=[], onchange=update_data),
 			'w': 30, # "weight" of virtual obstacle
 		},
 		'marked': {
