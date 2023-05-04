@@ -80,6 +80,7 @@ body{
 #div_msg{
 	max-height: 500px;
 	overflow-y: scroll;
+	max-width: 500px;
 }
 
 .markers_params{

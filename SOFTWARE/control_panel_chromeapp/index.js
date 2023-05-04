@@ -447,7 +447,8 @@ class Tank{
 			},
 			obstacles: {
 				virtual: {
-					rects: []
+					rects: [],
+					lines: []
 				},
 				marked: {
 					obj: [],
@@ -820,14 +821,15 @@ class Tank{
 		this.sendOptsDO('SNAPAUTOBOARD', '"Add auto markers"');
 	}
 	
-	addVirtualObstacle(vals){ // vals = [cornerTLx, cornerTLy, cornerBRx, cornerBRy]
-		this.data.obstacles.virtual.rects.push(...vals);
-		this.sendOptsSET(['obstacles', 'virtual', 'rects']);
+	addVirtualObstacle(vals, part){
+		this.data.obstacles.virtual[part].push(...vals);
+		this.sendOptsSET(['obstacles', 'virtual', part]);
 		drawOverlay();
 	}
-	delVirtualObstacle(ind){
-		this.data.obstacles.virtual.rects.splice(ind, 4);
-		this.sendOptsSET(['obstacles', 'virtual', 'rects']);
+	delVirtualObstacle(ind, part){
+		if (part == 'lines') this.data.obstacles.virtual[part].splice(ind*4, 4);
+		else /* rects */     this.data.obstacles.virtual[part].splice(ind*8, 8);
+		this.sendOptsSET(['obstacles', 'virtual', part]);
 		drawOverlay();
 	}
 	
@@ -913,7 +915,7 @@ function addTank(){
 							</div>
 							
 							<div class="trajectorymoveauto_params move_params2" style="display:${tank.data.move.auto.type == 'trajectory' ? 'inline' : 'none'}">
-								Trajectory: ${html_inputzone(1, 'input_trajectory', [0,0,1,1,3,-0.5], [tankidattr+" style='vertical-align:middle;'"], null, 'textarea')}<!--
+								Trajectory: ${html_inputzone(1, 'input_trajectory', [''], [tankidattr+" style='vertical-align:middle;'"], null, 'textarea')}<!--
 								--><input type="image" src="res/click.png" class="btn_picktrajectory btn_blink btn" ${tankidattr} style="animation:none;"></input>
 								<br>Current trajectory target point: <span class="current_traj_pnt">0</span>
 							</div>
@@ -967,12 +969,14 @@ function addTank(){
 				<summary>Obstacles</summary>
 				<details style="margin-left: 1rem;">
 					<summary>Virtual</summary>
-					tl: <input type='text' class="input_virtcorners" ${tankidattr} size='1' value='0.1'> <b>;</b> <input type='text' class="input_virtcorners" ${tankidattr} size='1' value='0.1'>
-					tr: <input type='text' class="input_virtcorners" ${tankidattr} size='1' value='0.5'> <b>;</b> <input type='text' class="input_virtcorners" ${tankidattr} size='1' value='0.1'><!--
-					--><input type="image" src="res/click.png" class="btn_pickvirtobst btn_blink btn" ${tankidattr} style="animation:none;"></input>
-					<br><input type="button" class="btn_addvirtobst" value="Add obstacle">
-					<br><br>
-					<input type="button" class="btn_delvirtobst" value="Remove obstacle"> id n°${html_inputzone(1, 'input_delvirtobst', [0], [tankidattr+' size=1'])}
+					Rect: <textarea class="input_virtobstrect" style="vertical-align:middle;" ${tankidattr}></textarea><!--
+					--><input type="image" src="res/click.png" class="btn_pickvirtobstrect btn_blink btn" ${tankidattr} style="animation:none;"></input>
+					<br><input type="button" class="btn_addvirtobstrect" value="Add rect">
+					<br><input type="button" class="btn_delvirtobstrect" value="Remove rect"> id n°<input type="text" class="input_delvirtobstrect" value=0 size=1>
+					<br><br>Line: <textarea class="input_virtobstline" style="vertical-align:middle;" ${tankidattr}></textarea><!--
+					--><input type="image" src="res/click.png" class="btn_pickvirtobstline btn_blink btn" ${tankidattr} style="animation:none;"></input>
+					<br><input type="button" class="btn_addvirtobstline" value="Add line">
+					<br><input type="button" class="btn_delvirtobstline" value="Remove line"> id n°<input type="text" class="input_delvirtobstline" value=0 size=1>
 				</details>
 				<details style="margin-left: 1rem;">
 					<summary>Marked</summary>
@@ -984,10 +988,6 @@ function addTank(){
 						tank.data.obstacles.marked.ids_range,
 						repeat(2, tankidattr+' size=2'),
 						'<b> - </b>'
-					)}
-					<br>Markers per obstacle: ${html_inputzone(
-						1, 'input_obstnbmarkers',
-						[tank.data.obstacles.marked.n], [tankidattr+' size=2']
 					)}
 					<br>Cell size: ${html_inputzone(
 						1, 'input_markedobst_size',
@@ -1051,9 +1051,6 @@ function addTank(){
 	set_inputzonebtns_callbacks(
 		nodes => tank.sendOptsSET(['obstacles', 'marked', 's'], Number(nodes[0].value))
 	, 1, tankdiv, '.input_markedobst_size');
-	set_inputzonebtns_callbacks(
-		nodes => tank.sendOptsSET(['obstacles', 'marked', 'n'], Number(nodes[0].value))
-	, 1, tankdiv, '.input_obstnbmarkers');
 	
 	// html_radiozone callbacks
 	set_radiozone_callbacks(
@@ -1105,15 +1102,25 @@ function addTank(){
 	});
 	getdom('.btn_startAutoMove', tankdiv)[0].addEventListener('click', ()=> tank.sendOptsDO('STARTMOVEAUTO', '"Start auto. movement"'));
 	getdom('.btn_stopAutoMove', tankdiv)[0].addEventListener('click', ()=> tank.sendOptsDO('STOPMOVEAUTO', '"Stop auto. movement"'));
-	getdom('.btn_pickvirtobst', tankdiv)[0].addEventListener('click', function(){
-		if (virtobst_tank == tank) unlatch_virtobst();
-		else                       latch_virtobst(tank, this);
+	getdom('.btn_pickvirtobstrect', tankdiv)[0].addEventListener('click', function(){
+		if (virtobstrect_tank == tank) unlatch_virtobstrect();
+		else                           latch_virtobstrect(tank, this);
 	});
-	getdom('.btn_addvirtobst', tankdiv)[0].addEventListener('click', function(){
-		tank.addVirtualObstacle(getdom('.input_virtcorners', this.parentNode).map( node => Number(node.value) ))
+	getdom('.btn_pickvirtobstline', tankdiv)[0].addEventListener('click', function(){
+		if (virtobstline_tank == tank) unlatch_virtobstline();
+		else                           latch_virtobstline(tank, this);
 	});
-	getdom('.btn_delvirtobst', tankdiv)[0].addEventListener('click', function(){
-		tank.delVirtualObstacle(Number(getdom('.input_delvirtobst', this.parentNode)[0].value))
+	getdom('.btn_addvirtobstrect', tankdiv)[0].addEventListener('click', function(){
+		tank.addVirtualObstacle(getdom('.input_virtobstrect', this.parentNode)[0].value.split(',').map(el=>Number(el)), 'rects')
+	});
+	getdom('.btn_delvirtobstrect', tankdiv)[0].addEventListener('click', function(){
+		tank.delVirtualObstacle(Number(getdom('.input_delvirtobstrect', this.parentNode)[0].value), 'rects')
+	});
+	getdom('.btn_addvirtobstline', tankdiv)[0].addEventListener('click', function(){
+		tank.addVirtualObstacle(getdom('.input_virtobstline', this.parentNode)[0].value.split(',').map(el=>Number(el)), 'lines')
+	});
+	getdom('.btn_delvirtobstline', tankdiv)[0].addEventListener('click', function(){
+		tank.delVirtualObstacle(Number(getdom('.input_delvirtobstline', this.parentNode)[0].value), 'lines')
 	});
 	getdom('.btn_picktrajectory', tankdiv)[0].addEventListener('click', function(){
 		if (trajectorypicker_tank == tank) unlatch_trajectorypicker();
@@ -1142,24 +1149,44 @@ function unlatch_targetpospicker(){
 	drawOverlay();
 }
 
-let virtobst_tank = null;
-function latch_virtobst(tank, node){
+let virtobstrect_tank = null;
+function latch_virtobstrect(tank, node){
 	canvas_overlay_top.style.cursor = 'crosshair';
-	getdom('.btn_pickvirtobst').forEach(el => {
+	getdom('.btn_pickvirtobstrect').forEach(el => {
 		el.style.animation = 'none';
 		el.style.boxShadow = null;
 	});
 	node.style.animation = null;
 	node.style.boxShadow = 'none';
-	virtobst_tank = tank;
+	virtobstrect_tank = tank;
 }
-function unlatch_virtobst(){
+function unlatch_virtobstrect(){
 	canvas_overlay_top.style.cursor = 'auto';
-	getdom('.btn_pickvirtobst').forEach(el => {
+	getdom('.btn_pickvirtobstrect').forEach(el => {
 		el.style.animation = 'none';
 		el.style.boxShadow = null;
 	});
-	virtobst_tank = null;
+	virtobstrect_tank = null;
+	drawOverlay();
+}
+let virtobstline_tank = null;
+function latch_virtobstline(tank, node){
+	canvas_overlay_top.style.cursor = 'crosshair';
+	getdom('.btn_pickvirtobstline').forEach(el => {
+		el.style.animation = 'none';
+		el.style.boxShadow = null;
+	});
+	node.style.animation = null;
+	node.style.boxShadow = 'none';
+	virtobstline_tank = tank;
+}
+function unlatch_virtobstline(){
+	canvas_overlay_top.style.cursor = 'auto';
+	getdom('.btn_pickvirtobstline').forEach(el => {
+		el.style.animation = 'none';
+		el.style.boxShadow = null;
+	});
+	virtobstline_tank = null;
 	drawOverlay();
 }
 
@@ -1255,13 +1282,25 @@ function drawOverlay(){
 		ctx.overlay.setLineDash([4, 4]);
 		ctx.overlay.lineWidth = 4;
 		ctx.overlay.font = `30px sans serif`;
-		let virtobst = tank.data.obstacles.virtual.rects;
-		for (let i=0; i<virtobst.length; i+=4){
+		
+		let rects = tank.data.obstacles.virtual.rects;
+		for (let i=0; i<rects.length; i+=8){
 			ctx.overlay.beginPath();
-			let [x1, y1] = [virtobst[i]*pxPerM, virtobst[i+1]*pxPerM];
-			ctx.overlay.rect(x1, y1, (virtobst[i+2]-virtobst[i])*pxPerM, (virtobst[i+3]-virtobst[i+1])*pxPerM);
+			ctx.overlay.moveTo(rects[i]*pxPerM, rects[i+1]*pxPerM);
+			ctx.overlay.lineTo(rects[i+2]*pxPerM, rects[i+3]*pxPerM);
+			ctx.overlay.lineTo(rects[i+4]*pxPerM, rects[i+5]*pxPerM);
+			ctx.overlay.lineTo(rects[i+6]*pxPerM, rects[i+7]*pxPerM);
+			ctx.overlay.closePath();
 			ctx.overlay.stroke();
-			ctx.overlay.fillText(i, x1+15, y1+30);
+			ctx.overlay.fillText(i/8, rects[i]*pxPerM+15, rects[i+1]*pxPerM+30);
+		}
+		let lines = tank.data.obstacles.virtual.lines;
+		for (let i=0; i<lines.length; i+=4){
+			ctx.overlay.beginPath();
+			ctx.overlay.moveTo(lines[i]*pxPerM, lines[i+1]*pxPerM);
+			ctx.overlay.lineTo(lines[i+2]*pxPerM, lines[i+3]*pxPerM);
+			ctx.overlay.stroke();
+			ctx.overlay.fillText(i/4, lines[i]*pxPerM+15, lines[i+1]*pxPerM+30);
 		}
 		
 		// draw targets
@@ -1311,18 +1350,29 @@ canvas_overlay_top.addEventListener("mouseup", ev => {
 	
 	if (mouse.start_drag != null){
 		
-		if (virtobst_tank != null){
+		if (virtobstline_tank != null){
 			ctx.overlay2.clearRect(0, 0, canvasW, canvasH);
 			
 			let [x, y] = convert_mouse_pos(ev);
 			
-			let textfields = getdom(`.input_virtcorners[tankid='${virtobst_tank.id}']`);
-			textfields[0].value = mouse.start_drag[0].toFixed(4);
-			textfields[1].value = mouse.start_drag[1].toFixed(4);
-			textfields[2].value = x.toFixed(4);
-			textfields[3].value = y.toFixed(4);
+			let textfield = getdom(`.input_virtobstline[tankid='${virtobstline_tank.id}']`)[0];
+			textfield.value = `${mouse.start_drag[0].toFixed(4)},${mouse.start_drag[1].toFixed(4)},${x.toFixed(4)},${y.toFixed(4)}`;
 			
-			unlatch_virtobst();
+			unlatch_virtobstline();
+		}
+		if (virtobstrect_tank != null){
+			ctx.overlay2.clearRect(0, 0, canvasW, canvasH);
+			
+			let p3 = convert_mouse_pos(ev);
+			
+			let textfield = getdom(`.input_virtobstrect[tankid='${virtobstrect_tank.id}']`)[0];
+			let invMat = ctx.overlay.getTransform().inverse();
+			let p1 = mouse.start_drag;
+			let [x2, y2] = [(p1[2] * invMat.a + p3[3] * invMat.c + invMat.e)/pxPerM, (p1[2] * invMat.b + p3[3] * invMat.d + invMat.f)/pxPerM];
+			let [x4, y4] = [(p3[2] * invMat.a + p1[3] * invMat.c + invMat.e)/pxPerM, (p3[2] * invMat.b + p1[3] * invMat.d + invMat.f)/pxPerM];
+			textfield.value = [p1[0],p1[1],x2,y2,p3[0],p3[1],x4,y4].map(el=>el.toFixed(4)).join(','); // CW from top left
+			
+			unlatch_virtobstrect();
 		}
 		
 		mouse.start_drag = null;
@@ -1343,15 +1393,28 @@ canvas_overlay_top.addEventListener("mousemove", ev => {
 	}
 	
 	if (mouse.pressed){
-		if (mouse.start_drag != null && virtobst_tank != null){
-			ctx.overlay2.clearRect(0, 0, canvasW, canvasH);
-			ctx.overlay2.beginPath();
-			let [x, y] = convert_mouse_pos_px(ev);
-			ctx.overlay2.rect(mouse.start_drag[2], mouse.start_drag[3], x-mouse.start_drag[2], y-mouse.start_drag[3])
-			ctx.overlay2.strokeStyle = '#000000';
-			ctx.overlay2.setLineDash([7, 7]);
-			ctx.overlay2.lineWidth = 2;
-			ctx.overlay2.stroke();
+		if (mouse.start_drag != null){
+			if (virtobstline_tank != null){
+				ctx.overlay2.clearRect(0, 0, canvasW, canvasH);
+				ctx.overlay2.beginPath();
+				let [x, y] = convert_mouse_pos_px(ev);
+				ctx.overlay2.moveTo(mouse.start_drag[2], mouse.start_drag[3]);
+				ctx.overlay2.lineTo(x, y);
+				ctx.overlay2.strokeStyle = '#000000';
+				ctx.overlay2.setLineDash([7, 7]);
+				ctx.overlay2.lineWidth = 2;
+				ctx.overlay2.stroke();
+			}
+			if (virtobstrect_tank != null){
+				ctx.overlay2.clearRect(0, 0, canvasW, canvasH);
+				ctx.overlay2.beginPath();
+				let [x, y] = convert_mouse_pos_px(ev);
+				ctx.overlay2.rect(mouse.start_drag[2], mouse.start_drag[3], x-mouse.start_drag[2], y-mouse.start_drag[3])
+				ctx.overlay2.strokeStyle = '#000000';
+				ctx.overlay2.setLineDash([7, 7]);
+				ctx.overlay2.lineWidth = 2;
+				ctx.overlay2.stroke();
+			}
 		}
 	}
 });
