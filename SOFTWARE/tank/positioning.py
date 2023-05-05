@@ -2,6 +2,7 @@ import util # util.py
 Object = util.Object
 
 import numpy as np
+import scipy.spatial.ConvexHull
 import cv2
 import cv2.aruco as aruco
 import math
@@ -164,16 +165,22 @@ def getMarkedObstacles(cameradata, videoframe, dictio, mrange, s, n, collider, t
 	corners, ids, rejectedCorners = aruco.detectMarkers(videoframe, dictio, parameters=detect_params)
 	if ids is not None and len(corners) > 0:
 		
-		keptIds = [ mid[0] for mid in ids if mid[0] >= mrange[0] and mid[0] <= mrange[1] ]
-		if len(keptIds) == 0 : return
+		keptCorners = []
+		keptInds = []
+		for i in range(len(ids)):
+			if ids[i][0] < mrange[0] or ids[i][0] > mrange[1] : continue
+			keptCorners.append(corners[i])
+			keptInds.append(i)
+		if len(keptInds) == 0 : return
 		
 		rvecs, tvecs, objpoints = aruco.estimatePoseSingleMarkers(np.array(keptCorners, dtype=np.float32), s, cameradata['matrix'], cameradata['coeffs'])
 		
 		# group markers together if they are part of the same obstacle (same id)
-		for i in range(len(inds)) : 
-			if not inds[i][0] in keptIds : continue
-			if not inds[i][0] in grouped_inds : grouped_inds[inds[i][0]] = []
-			grouped_inds[inds[i][0]].append(i)
+		grouped_inds = {};
+		for ind in keptInds:
+			mid = ids[ind][0]
+			if not mid in grouped_inds : grouped_inds[mid] = []
+			grouped_inds[mid].append(ind)
 		
 		# express corners in camera coords
 		local_corners = np.array([[-s/2,s/2,0,1],[s/2,s/2,0,1],[s/2,-s/2,0,1],[-s/2,-s/2,0,1]], dtype=np.float32) # CW center order [x,y,z,1]*4
@@ -186,15 +193,21 @@ def getMarkedObstacles(cameradata, videoframe, dictio, mrange, s, n, collider, t
 		
 		# generate 2D colliders for obstacles
 		obstacles = []
-		if collider == 'AABB':
+		
+		if collider == 'Hull':
+			for obj_pnts in cam_points:
+				obstacles.append( np.flatten(ConvexHull(obj_pnts[:,:2])) ) # convex hull of x,y of points
+		
+		elif collider == 'AABB':
 			for obj_pnts in cam_points:
 				minX, minY = 999999
 				maxX, maxY = 999999
 				# don't care about z
 				for pnt in obj_pnts:
-					maxX = max(maxX, pnt[0] ; minX = min(minX, pnt[0])
-					maxY = max(maxY, pnt[1] ; minY = min(minY, pnt[1])
+					maxX = max(maxX, pnt[0]) ; minX = min(minX, pnt[0])
+					maxY = max(maxY, pnt[1]) ; minY = min(minY, pnt[1])
 				obstacles.append(minX, minY, maxX, maxY)
+		
 		else: # Sphere
 			pass
 		
@@ -242,6 +255,5 @@ def getMarkedObstacles(cameradata, videoframe, dictio, mrange, s, n, collider, t
 #loop()
 
 # TODO:
-# check that positioning with the presence of markers not in board still works
 # - allow different sized markers, provide size for each marker
 # - try to reuse last tvec,rvec as guess for pos. estimation ?

@@ -191,7 +191,13 @@ def send_move_data(server):
 				if isinstance(obj.val, (list, np.ndarray)) : msg += f"{key1},real,{key2};{ ','.join([str(el) for el in obj.val]) }\n"
 				else                         : msg += f"{key1},real,{key2};{str(obj.val)}\n"
 	
-	msg += f"obstacles,marked,obj;{ ','.join([str(el) for el in data['obstacles']['marked']['obj']]) }\n"
+	collider = data['obstacles']['marked']['collider']
+	if collider == 'Hull':
+		msg += f"obstacles,marked,obj;{ '|'.join([ ','.join(str(el) for el in obst) for obst in data['obstacles']['marked']['obj'] ]) }\n"
+	elif collider == 'AABB':
+		msg += f"obstacles,marked,obj;{ ','.join([str(el) for el in data['obstacles']['marked']['obj']]) }\n"
+	else : # Sphere
+		pass
 	
 	server.send(msg.encode('ascii'))
 def send_auto_markers():
@@ -252,30 +258,38 @@ def set_move_vel(vel):
 	kit.motor2.throttle = 0.9 if vel[1] > 0.9 else (-0.9 if vel[1] < -0.9 else vel[1])
 
 # sdf_vect_* return direction and signed distance 
+def sdf_vect_aarect(r1x,r1y, r2x,r2y, px,py): # axis aligned rectangle
+	orig = [clamp(r1x, r2x, px), clamp(r1y, r2y, py)]
+	rectdir = [px-orig[0], py-orig[1]]
+	rectdist = math.sqrt( rectdir[0]**2 + rectdir[1]**2 )
+	rectdir[0] /= rectdist ; rectdir[1] /= rectdist
+	return (rectdir, rectdist)
 def sdf_vect_rect(r, px,py): # rotated rectangle
 	# local axes of rect.
-	let rX = [rects[i+6]-rects[i], rects[i+7]-rects[i+1]];
-	let rXdist = Math.sqrt(rX[0]**2 + rX[1]**2);
-	rX[0] /= rXdist; rX[1] /= rXdist;
-	let rY = [rects[i+2]-rects[i], rects[i+3]-rects[i+1]];
-	let rYdist = Math.sqrt(rY[0]**2 + rY[1]**2);
-	rY[0] /= rYdist; rY[1] /= rYdist;
-	// project point to rect. coords
-	let rectPntDir = [pos[0]-rects[i], pos[1]-rects[i+1]];
-	let projPosX = rectPntDir[0]*rX[0] + rectPntDir[1]*rX[1];
-	let projPosY = rectPntDir[0]*rY[0] + rectPntDir[1]*rY[1];
-	// same as axis aligned sdf_vect for rectangles, but we project orig back from local rect. coords to global coords
-	// orig_local => rectO + a*rectX + b*rectY
-	let local_orig = [clamp(0, rXdist, projPosX), clamp(0, rYdist, projPosY)];
-	let orig = [ 
-		rects[i]   + local_orig[0]*rX[0] + local_orig[1]*rY[0],
-		rects[i+1] + local_orig[0]*rX[1] + local_orig[1]*rY[1]
-	];
-	ctx.fillRect(orig[0]-3, orig[1]-3, 6, 6);
+	rX = [r[6]-r[0], r[i+7]-r[1]]
+	rXdist = math.sqrt(rX[0]**2 + rX[1]**2)
+	rX[0] /= rXdist ; rX[1] /= rXdist
+	rY = [r[2]-r[0], r[3]-r[0]]
+	rYdist = math.sqrt(rY[0]**2 + rY[1]**2)
+	rY[0] /= rYdist ; rY[1] /= rYdist
 	
-	let rectdir = [pos[0]-orig[0], pos[1]-orig[1]];
-	let rectdist = Math.sqrt( rectdir[0]**2 + rectdir[1]**2 );
-	rectdir[0] /= rectdist; rectdir[1] /= rectdist;
+	# project point to rect. coords
+	rectPntDir = [px-r[0], py-r[1]]
+	projPosX = rectPntDir[0]*rX[0] + rectPntDir[1]*rX[1]
+	projPosY = rectPntDir[0]*rY[0] + rectPntDir[1]*rY[1]
+	
+	# same as axis aligned sdf_vect for rectangles, but we project orig back from local rect. coords to global coords
+	# orig_local => rectO + a*rectX + b*rectY
+	local_orig = [clamp(0, rXdist, projPosX), clamp(0, rYdist, projPosY)]
+	orig = [ 
+		r[0] + local_orig[0]*rX[0] + local_orig[1]*rY[0],
+		r[1] + local_orig[0]*rX[1] + local_orig[1]*rY[1]
+	]
+	
+	rectdir = [px-orig[0], py-orig[1]]
+	rectdist = math.sqrt( rectdir[0]**2 + rectdir[1]**2 )
+	rectdir[0] /= rectdist ; rectdir[1] /= rectdist
+	return (rectdir, rectdist)
 def sdf_vect_circ(cx,cy,r, px,py):
 	# point on circle surface closest to pos
 	circleDir = [px-cx, py-cy]
@@ -300,53 +314,62 @@ def sdf_vect_line(l1x,l1y, l2x,l2y, px,py):
 	lineDir[0] /= lineDist ; lineDir[1] /= lineDist
 	return (lineDir, lineDist)
 
+# rotate v1 based on v2 (v1 and v2 should be unit vectors)
+def influence_inv_vect(v1, v2, v2dist, w):
+	v1[0] += v2[0] * w/v2dist # influence is inversly
+	v1[1] += v2[1] * w/v2dist # proportional to distance
+	dist = math.sqrt(v1[0]**2 + v1[1]**2)
+	v1[0] /= dist ; v1[1] /= dist
+
 minDistTarget = 0.03 # 3cm around target means the destination is reached
 slowDownDist = 0.08 # start slowing down at this distance to target
 def auto_goto_point(target):
-	dirTarget = [target[0]-transfo[0][0], target[1]-transfo[0][1]]
-	distTarget = math.sqrt( dirTarget[0]**2 + dirTarget[1]**2 )
+	moveDir = [target[0]-transfo[0][0], target[1]-transfo[0][1]]
+	moveDist = math.sqrt( moveDir[0]**2 + moveDir[1]**2 )
+	moveDir[0] /= moveDist ; moveDir[1] /= moveDist
 	
-	if distTarget <= minDistTarget : return True # we have arrived at target
+	speed = data['move']['auto']['speed'].val
+	
+	# we have arrived at target
+	if moveDist <= minDistTarget : return True
 	
 	# slow down if near target
-	#if distTarget >= slowDownDist : speed = min( speed, max(0.15, distTarget/slowDownDist*0.5) )
+	#if moveDist >= slowDownDist : speed = min( speed, max(0.15, moveDist/slowDownDist*0.5) )
+	
+	# influence of virtual obstacles on movement direction
+	w = data['obstacles']['virtual']['w'] # obstacle weight
+	rects = data['obstacles']['virtual']['rects'].val
+	for i in range(0,len(rects),8) : influence_inv_vect(moveDir, *sdf_vect_rect(rects[i:i+8], *transfo[0][:2]), w)
+	lines = data['obstacles']['virtual']['lines'].val
+	for i in range(0,len(lines),4) : influence_inv_vect(moveDir, *sdf_vect_line(*lines[i:i+4], *transfo[0][:2]), w)
+	
+	# influence of marked obstacles on movement direction
+	w = data['obstacles']['marked']['w'] # obstacle weight
+	obj =  data['obstacles']['marked']['obj']
+	collider = data['obstacles']['marked']['collider']
+	if collider == 'Hull' and len(obj) != 0:
+		for obstacle in obj:
+			for i in range(0,len(obstacle),4) : influence_inv_vect(moveDir, *sdf_vect_line(*obstacle[i:i+4], *transfo[0][:2]), w)
+			#i = len(obstacle) # not needed ? 
+			influence_inv_vect(moveDir, *sdf_vect_line(*obstacle[:2], *obstacle[i-2:i], *transfo[0][:2]), w) # line between first and last point
+			
+	elif collider == 'AABB':
+		for i in range(0,len(obj),4) : influence_inv_vect(moveDir, *sdf_vect_aarect(*obj[i:i+4], *transfo[0][:2]), w)
+	
+	else: # Sphere
+		pass
 	
 	# X, Y axes of tank
 	tankY = transfo[1]
 	tmp = tankY[0]**2 + tankY[1]**2
 	tankX = [tankY[1]/tmp, -tankY[0]/tmp]
 	# projection of target on those axes
-	targetX = dirTarget[0]*tankX[0] + dirTarget[1]*tankX[1]
-	targetY = dirTarget[0]*tankY[0] + dirTarget[1]*tankY[1]
-	velX = targetX*speed/distTarget ; velY = targetY*speed/distTarget
-	
-	speed = data['move']['auto']['speed'].val
-	
-	# TODO: rotated rectangle and lines
-	# influence of obstacles on vel
-	rects = data['obstacles']['virtual']['rects'].val # rectangular virtual obstacles
-	w = data['obstacles']['virtual']['w']*speed # obstacle weight
-	for i in range(len(rects)):
-		# point on rect surface closest to tank
-		origX = max(rects[i], min(transfo[0][0], rects[i+2]))
-		origY = max(rects[i+1], min(transfo[0][1], rects[i+3]))
-		
-		rectdirX = transfo[0][0] - origX
-		rectdirY = transfo[0][1] - origY
-		rectdist = math.sqrt(rectdirX**2 + rectdirY**2)
-		rectdirX /= rectdist
-		rectdirY /= rectdist
-		
-		velX += rectdirX * w/rectdist # influence of obstacle is inversly
-		velY += rectdirY * w/rectdist # proportional to distance
-		veldist = math.sqrt(velX**2 + velY**2)
-		velX *= speed/veldist
-		velY *= speed/veldist
-	
+	moveX = moveDir[0]*tankX[0] + moveDir[1]*tankX[1]
+	moveY = moveDir[0]*tankY[0] + moveDir[1]*tankY[1]
 	# almost same as the corresponding gamepad javascript code
-	angle = math.atan2(velY, velX)
-	if angle >= -math.pi/2 and angle <= math.pi/2 : set_move_vel([velY, speed])
-	else                                          : set_move_vel([speed, velY])
+	angle = math.atan2(moveY, moveX)
+	if angle >= -math.pi/2 and angle <= math.pi/2 : set_move_vel([moveY*speed, speed])
+	else                                          : set_move_vel([speed, moveY*speed])
 	
 	return False # not at target yet
 	
@@ -432,12 +455,12 @@ data = {
 		'virtual': {
 			'rects': Object(val=[], onchange=update_data),
 			'lines': Object(val=[], onchange=update_data),
-			'w': 30, # "weight" of virtual obstacle
+			'w': 1, # "weight" of virtual obstacle
 		},
 		'marked': {
 			'obj': [],
 			'ids_range': Object(val=[201, 249], onchange=update_obst_markers_range),
-			'w': 30,
+			'w': 1,
 			's': Object(val=0.05, onchange=update_data),
 			'n': Object(val=6, onchange=update_data), # max number of markers per obstacle
 			'collider': Object(val='AABB', onchange=update_data) # bounding shape of the obstacles
@@ -503,12 +526,6 @@ while True:
 
 
 # TODO:
-
-#	- Ajouter code obstacles via camera
-#	- aruco coded obstacles:
-#		- boxes, one marker per vertical face -> forms a board
-#		- range of ids are declared in use for obstacles, another range for map positioning
-#		- boxes can be registered: like auto_board
 #	- unmarkerd obstacles:
 #		- use cynlinders of knwon size, get bounding rect, get image corners, solvpnp
 #		-> ex: cardboard roll
