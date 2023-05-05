@@ -15,7 +15,7 @@ const ARUCO_GRID_CMARGIN = ARUCO_GRID_CSIZE;
 // default marked obstacles size
 const ARUCO_OBST_SIZE = 0.05; // m
 const DEFAULT_NBMARKERS_PER_OBST = 6;
-const DEFAULT_MARKEDOBST_COLLIDERS = ['AABB', 'Sphere'];
+const DEFAULT_MARKEDOBST_COLLIDERS = ['AABB', 'Hull', 'Sphere'];
 const DEFAULT_MARKEDOBST_COLLIDER = 'AABB';
 
 // default marker ids
@@ -581,16 +581,23 @@ class Tank{
 		for (let line of msg.split('\n')){
 			if (line == "") continue;
 			
-			let [keys, vals] = line.split(';').map( el => el.split(',') );
+			let [keys, vals] = line.split(';').map( el => el.split('|') );
 			
 			let obj = obj_get(this.data, keys.slice(0,-1));
 			let key = arr_last(keys);
 			
-			if (vals.length == 1){
-				if (key == 'on') obj[key] = vals[0] == '1' ? true : false;
-				else             obj[key] = Number(vals[0]);
+			if (vals.length == 1){ // single value or 1 dimensional array
+				vals = vals[0].split(',');
+				if (vals.length == 1){
+					if (key == 'on') obj[key] = vals[0] == '1' ? true : false;
+					else             obj[key] = Number(vals[0]);
+				}
+				else                 obj[key] = vals.map( el => Number(el) );
 			}
-			else                 obj[key] = vals.map( el => Number(el) );
+			
+			else{ // 2D array
+				obj[key] = vals.map( part => part.split(',').map(el => Number(el)) );
+			}
 		}
 	}
 	// send move / opts string data, handle errors

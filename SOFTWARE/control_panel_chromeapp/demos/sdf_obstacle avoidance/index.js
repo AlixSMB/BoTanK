@@ -35,15 +35,19 @@ canvas.addEventListener("mousemove", ev => {
 	ctx.clearRect(0, 0, canvasW, canvasH);
 	ctx.restore();
 	
+	let aarects = [
+		100, 100, 300, 200
+	];
 	let rects = [
-		100, 100, 100, 200, 300, 200, 300, 100,
 		300,300, 200,400, 300,500, 400,400
 	];
 	let circles = [
 		500, 400, 30
 	];
 	let lines = [
-		450, 200, 500, 150
+		450,200,500,150,
+		
+		400,50,480,70, 480,70,420,100, 420,100,400,50 // triangle
 	];
 	let target = [550, 300];
 	let speed = 100;
@@ -55,6 +59,23 @@ canvas.addEventListener("mousemove", ev => {
 	let veldist = Math.sqrt( vel[0]**2 + vel[1]**2 );
 	vel[0] *= speed/veldist; vel[1] *= speed/veldist;
 	
+	for (let i=0; i<aarects.length; i+=4){
+		ctx.beginPath();
+		ctx.rect(aarects[i],aarects[i+1], aarects[i+2]-aarects[i],aarects[i+3]-aarects[i+1]); 
+		ctx.stroke();
+		
+		let orig = [clamp(aarects[i], aarects[i+2], pos[0]), clamp(aarects[i+1], aarects[i+3], pos[1])];
+		ctx.fillRect(orig[0]-3, orig[1]-3, 6, 6);
+		
+		let rectdir = [pos[0]-orig[0], pos[1]-orig[1]];
+		let rectdist = Math.sqrt( rectdir[0]**2 + rectdir[1]**2 );
+		rectdir[0] /= rectdist; rectdir[1] /= rectdist;
+		
+		let w = 30*speed; // weight of obstacle avoidance
+		vel = [ vel[0] + rectdir[0]*w/rectdist, vel[1] + rectdir[1]*w/rectdist ];
+		veldist = Math.sqrt( vel[0]**2 + vel[1]**2 );
+		vel[0] *= speed/veldist; vel[1] *= speed/veldist;
+	}
 	for (let i=0; i<rects.length; i+=8){
 		ctx.beginPath();
 		ctx.moveTo(rects[i], rects[i+1]);
@@ -109,19 +130,19 @@ canvas.addEventListener("mousemove", ev => {
 	}
 	for (let i=0; i<lines.length; i+=4){
 		ctx.beginPath();
-		ctx.moveTo(lines[0], lines[1]);
-		ctx.lineTo(lines[2], lines[3]);
+		ctx.moveTo(lines[i+0], lines[i+1]);
+		ctx.lineTo(lines[i+2], lines[i+3]);
 		ctx.stroke();
 		
-		let linePntDir = [pos[0]-lines[0], pos[1]-lines[1]];
-		let lineAxis = [lines[2]-lines[0], lines[3]-lines[1]];
+		let linePntDir = [pos[0]-lines[i+0], pos[1]-lines[i+1]];
+		let lineAxis = [lines[i+2]-lines[i+0], lines[i+3]-lines[i+1]];
 		let lineSize = Math.sqrt( lineAxis[0]**2 + lineAxis[1]**2 );
 		lineAxis[0] /= lineSize; lineAxis[1] /= lineSize;
 		let projPos = linePntDir[0]*lineAxis[0] + linePntDir[1]*lineAxis[1];
 		let local_orig = clamp(0, lineSize, projPos);
 		let orig = [
-			lines[0]+lineAxis[0]*local_orig,
-			lines[1]+lineAxis[1]*local_orig
+			lines[i+0]+lineAxis[0]*local_orig,
+			lines[i+1]+lineAxis[1]*local_orig
 		];
 		ctx.fillRect(orig[0]-3, orig[1]-3, 6, 6);
 		
