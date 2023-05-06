@@ -1,7 +1,7 @@
 # Note for windows CMD: if QuickEdit mode is enabled, clicking the console freezes the script until a keyboard key is pressed... 
 
 from util import * # util.py
-from positioning import getBoardTransform, auto_make_board # positioning.py
+from positioning import getBoardTransform, auto_make_board, getMarkedObstacles # positioning.py
 
 import cv2
 from cv2 import aruco
@@ -14,15 +14,14 @@ import time
 import pickle
 
 # load camera data
-CAMERADATA_FILENAME = "laptopcam_fisheye_params_2" 
+CAMERADATA_FILENAME = "laptopcam_fisheye_params_3" 
 print(f"Reading camera calibration params from \"{CAMERADATA_FILENAME}\"")
 with open(CAMERADATA_FILENAME, "rb") as filecamera : cameradata = pickle.load(filecamera)
 
 # receive camera feed
 camW = 1280
 camH = 720
-cam_sendS = 0.5
-cam_quality = 75
+cam_sendS = 0.25
 cam_sendW = round(cam_sendS*camW)
 cam_sendH = round(cam_sendS*camH)
 GST_STRING = \
@@ -464,8 +463,9 @@ data = {
 			's': Object(val=0.05, onchange=update_data),
 			'n': Object(val=6, onchange=update_data), # max number of markers per obstacle
 			'collider': Object(val='AABB', onchange=update_data) # bounding shape of the obstacles
+		}
 	}
-};
+}
 
 timeouts = {
 	'check_movedata': Timeout(1, partial(data['move']['com']['vel'].onchange, [0,0], True)) # set vel to 0 if we don't receive move data for extended amount of time and move is set to manual
@@ -475,6 +475,7 @@ if not data['move']['auto']['on'].val : timeouts['check_movedata'].enable()
 set_timer('stream_imgframe', 1/11) # 11 fps
 set_timer('movedata', 1/10) # 10 fps
 transfo = None
+i=0
 while True:
 	timers_start()
 
@@ -486,8 +487,7 @@ while True:
 			cap.release()
 			break
 		
-		camera_frame = fisheye_undistort(cameradata, camera_frame)
-		
+		camera_frame = fisheye_undistort(cameradata, np.copy(camera_frame)) # image copy is necessary ! (weird bugs otherwise)
 		# compute tank pos, speed
 		if current_mobj is not None:
 			transfo = getBoardTransform(cameradata, camera_frame, current_mobj.board, aruco_dict, transfo)
@@ -497,14 +497,15 @@ while True:
 				
 				data['obstacles']['marked']['obj'] = getMarkedObstacles(
 					cameradata, camera_frame, aruco_dict, 
-					data['obstacles']['marked']['ids-range'].val, data['obstacles']['marked']['s'].val, 
+					data['obstacles']['marked']['ids_range'].val, data['obstacles']['marked']['s'].val, 
 					data['obstacles']['marked']['n'].val, data['obstacles']['marked']['collider'].val, transfo
 				)
 				if data['move']['auto']['on'].val : auto_move()
 	
 	# stream camera
 	if check_timer('stream_imgframe'):
-		camera_jpegbytes = cv2.imencode('.jpeg', cv2.resize(camera_frame, (cam_sendW,cam_sendH)), [int(cv2.IMWRITE_JPEG_QUALITY), cam_quality])[1].tobytes()
+		camera_jpegbytes = cv2.imencode('.jpeg', cv2.resize(camera_frame, (cam_sendW,cam_sendH)))[1].tobytes()
+		#print(len(camera_jpegbytes))
 		net.out_cam.send(camera_jpegbytes)
 	
 	net.server_opts.checkdead() # will disconnect if remote connection hasn't sent data in a while
@@ -534,3 +535,6 @@ while True:
 #		- for ... in list(...dict...)
 #		- use dict for url dispatcher ?
 #	- handle timers differently ?
+
+# Canon projectile: aluminum paper ball
+# Print GT2 timing belts for caterpillar tracks

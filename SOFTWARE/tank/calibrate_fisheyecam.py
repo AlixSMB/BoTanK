@@ -10,10 +10,10 @@ img_samples = glob.glob('calibration_images/*.jpg')
 img_size = cv2.imread(img_samples[0]).shape[:2]
 print(f"Using {len(img_samples)} images of size {img_size}")
 
-chess_s = 0.022 # cell size in meters
+chess_s = 0.02 # cell size in meters
 print(f"Using a cell size of {chess_s} m")
-chess_w = 10
-chess_h = 6
+chess_w = 20
+chess_h = 10
 cb_corners = np.asarray([getChessBoardCorners(chess_w, chess_h, chess_s)], np.float32)
 print(f"Using a {chess_w}x{chess_h} grid")
 

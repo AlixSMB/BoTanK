@@ -2,7 +2,8 @@ import util # util.py
 Object = util.Object
 
 import numpy as np
-import scipy.spatial.ConvexHull
+import scipy
+from scipy.spatial import ConvexHull
 import cv2
 import cv2.aruco as aruco
 import math
@@ -75,7 +76,7 @@ def auto_make_board(cameradata, videoframe, m_obj, ms, dictio, mrange=[0,200]):
 				)
 		
 		if newMarkers:
-			orig_ind = np.argmin(ids)                   # local origin will be marker with smallest number or its origin
+			orig_ind = np.argmin(ids) # local origin will be marker with smallest number or its origin
 			orig_id = np.min(ids)
 			orig_ref = m_obj.cells_i[orig_id].out_ref
 			if orig_ref is not None:
@@ -135,8 +136,8 @@ def getBoardTransform(cameradata, videoframe, board, dictio, transfo=None):
 		nb_markers, rvec, tvec = aruco.estimatePoseBoard(corners, ids, board, cameradata['matrix'], cameradata['coeffs'], None, None)
 		
 		if nb_markers > 0:
-			# laggy as hell in some situations ...
 			#aruco.drawDetectedMarkers(videoframe, corners, ids)
+			# laggy as hell in some situations ...
 			#cv2.drawFrameAxes(videoframe, cameradata['matrix'], cameradata['coeffs'], rvec, tvec, 0.7)
 			
 			rmat = cv2.Rodrigues(rvec)[0]
@@ -183,7 +184,7 @@ def getMarkedObstacles(cameradata, videoframe, dictio, mrange, s, n, collider, t
 			grouped_inds[mid].append(ind)
 		
 		# express corners in camera coords
-		local_corners = np.array([[-s/2,s/2,0,1],[s/2,s/2,0,1],[s/2,-s/2,0,1],[-s/2,-s/2,0,1]], dtype=np.float32) # CW center order [x,y,z,1]*4
+		# use objpoints instead of localcorners
 		cam_points = []
 		for inds in grouped_inds.values():
 			cam_points.append([]) # new object
@@ -212,6 +213,7 @@ def getMarkedObstacles(cameradata, videoframe, dictio, mrange, s, n, collider, t
 			pass
 		
 		return obstacles
+
 
 # For testing
 #import pickle
