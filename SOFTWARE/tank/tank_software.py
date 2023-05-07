@@ -40,7 +40,7 @@ GST_STRING = \
 	)
 #cap = cv2.VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) #VideoCapture(GST_STRING, cv2.CAP_GSTREAMER) # from util.py [!]
 cap = cv2.VideoCapture(0)
-#cap.set(cv2.CAP_PROP_EXPOSURE, -4) # set to 0.25 auto-adjust
+cap.set(cv2.CAP_PROP_EXPOSURE, -5) # set to 0.25 auto-adjust
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 10000);
 
 print(f"Video res.: {cap.get(cv2.CAP_PROP_FRAME_WIDTH)}x{cap.get(cv2.CAP_PROP_FRAME_HEIGHT)}")
@@ -190,11 +190,11 @@ def send_move_data(server):
 				if isinstance(obj.val, (list, np.ndarray)) : msg += f"{key1},real,{key2};{ ','.join([str(el) for el in obj.val]) }\n"
 				else                         : msg += f"{key1},real,{key2};{str(obj.val)}\n"
 	
-	collider = data['obstacles']['marked']['collider']
+	collider = data['obstacles']['marked']['obj'].collider
 	if collider == 'Hull':
-		msg += f"obstacles,marked,obj;{ '|'.join([ ','.join(str(el) for el in obst) for obst in data['obstacles']['marked']['obj'] ]) }\n"
+		msg += f"obstacles,marked,obj;{ '|'.join([ ','.join(str(el) for el in obst) for obst in data['obstacles']['marked']['obj'].val ]) };2\n"
 	elif collider == 'AABB':
-		msg += f"obstacles,marked,obj;{ ','.join([str(el) for el in data['obstacles']['marked']['obj']]) }\n"
+		msg += f"obstacles,marked,obj;{ ','.join([str(el) for el in data['obstacles']['marked']['obj'].val]) }\n"
 	else : # Sphere
 		pass
 	
@@ -233,7 +233,6 @@ def update_markers_type(self, mtype):
 	if mtype == 'auto' : send_auto_markers()
 def update_markers(self, mtype, mids, cornersAll):
 	for i in range(len(mids)) : self.cells[mids[i]] = cornersAll[i]
-	self.board = aruco.Board_create(np.asarray(list(self.cells.values()), np.float32), aruco_dict, np.asarray(list(self.cells.keys()), int))
 def update_pos_markers_range(self, mrange):
 	self.val = mrange
 	reset_auto_board()
@@ -400,7 +399,6 @@ def reset_auto_board():
 def newAutoBoard():
 	return Object(
 		cells = {}, cells_tmp = {}, cells_i = {}, # cells contains cells positioned relative to origin with smallest id, cells_tmp contains all cells
-		board = None,                             # cells_i = cells info (in_refs, out_ref, etc..., ms = marker size, orig = origin id 
 		orig = 9999
 	)
 
@@ -448,7 +446,7 @@ data = {
 		'auto_s': Object(val=0.035, onchange=update_auto_markers_size), # 3.5 centimeters by default, modifiable by control panel
 		'auto': newAutoBoard(),
 		
-		'grid': Object(cells={}, board=None, onchange=update_markers) 
+		'grid': Object(cells={}, onchange=update_markers) 
 	},
 	'obstacles': {
 		'virtual': {
@@ -457,13 +455,16 @@ data = {
 			'w': 1, # "weight" of virtual obstacle
 		},
 		'marked': {
-			'obj': [],
+			'obj': Object(val=[], collider=None),
 			'ids_range': Object(val=[201, 249], onchange=update_obst_markers_range),
 			'w': 1,
 			's': Object(val=0.05, onchange=update_data),
 			'n': Object(val=6, onchange=update_data), # max number of markers per obstacle
 			'collider': Object(val='AABB', onchange=update_data) # bounding shape of the obstacles
 		}
+	},
+	'camera': {
+		'db_view': {'on': Object(val=False, onchange=update_data)}
 	}
 }
 
@@ -474,7 +475,7 @@ if not data['move']['auto']['on'].val : timeouts['check_movedata'].enable()
 
 set_timer('stream_imgframe', 1/11) # 11 fps
 set_timer('movedata', 1/10) # 10 fps
-transfo = None
+transfo = [np.zeros(3, dtype=np.float32), np.array([1,0], dtype=np.float32), np.eye(4, dtype=np.float32), np.eye(4, dtype=np.float32)] # default transfo
 i=0
 while True:
 	timers_start()
@@ -488,19 +489,21 @@ while True:
 			break
 		
 		camera_frame = fisheye_undistort(cameradata, np.copy(camera_frame)) # image copy is necessary ! (weird bugs otherwise)
+		#camera_frame = fisheye_undistort(cameradata, cv2.threshold(cv2.cvtColor(camera_frame,cv2.COLOR_BGR2GRAY),10,255,cv2.THRESH_BINARY)[1])
+		
 		# compute tank pos, speed
 		if current_mobj is not None:
-			transfo = getBoardTransform(cameradata, camera_frame, current_mobj.board, aruco_dict, transfo)
-			if transfo is not None:
-				data['move']['real']['pos'].val = transfo[0][:2]
-				data['move']['real']['dir'].val = transfo[1]
-				
-				data['obstacles']['marked']['obj'] = getMarkedObstacles(
-					cameradata, camera_frame, aruco_dict, 
-					data['obstacles']['marked']['ids_range'].val, data['obstacles']['marked']['s'].val, 
-					data['obstacles']['marked']['n'].val, data['obstacles']['marked']['collider'].val, transfo
-				)
-				if data['move']['auto']['on'].val : auto_move()
+			transfo = getBoardTransform(cameradata, camera_frame, current_mobj, aruco_dict, transfo, data['camera']['db_view']['on'].val)
+			data['move']['real']['pos'].val = transfo[0][:2]
+			data['move']['real']['dir'].val = transfo[1]
+			
+			data['obstacles']['marked']['obj'] = getMarkedObstacles(
+				cameradata, camera_frame, aruco_dict, 
+				data['obstacles']['marked']['ids_range'].val, data['obstacles']['marked']['s'].val, 
+				data['obstacles']['marked']['n'].val, data['obstacles']['marked']['collider'].val, transfo
+			)
+			
+			if data['move']['auto']['on'].val : auto_move()
 	
 	# stream camera
 	if check_timer('stream_imgframe'):
@@ -517,8 +520,7 @@ while True:
 	recv_opts_data(net.server_opts)
 	
 	# send move messages
-	if check_timer('movedata'):
-		send_move_data(net.inout_move)
+	if check_timer('movedata') : send_move_data(net.inout_move)
 	
 	
 	#if cv2.waitKey(1) == ord('q') : break
@@ -527,14 +529,14 @@ while True:
 
 
 # TODO:
-#	- unmarkerd obstacles:
-#		- use cynlinders of knwon size, get bounding rect, get image corners, solvpnp
-#		-> ex: cardboard roll
-#	- use getBoardObjectAndImagePoints and solvePnP instead of estimatePoseBoard ?
 # 	- optimize code:
 #		- for ... in list(...dict...)
 #		- use dict for url dispatcher ?
 #	- handle timers differently ?
+
+# add obstacle smoothing / remain delay ?
+# add flashlight to jetbot ?
+# finish detector perameters customization
 
 # Canon projectile: aluminum paper ball
 # Print GT2 timing belts for caterpillar tracks

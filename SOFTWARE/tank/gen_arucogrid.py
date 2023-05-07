@@ -10,10 +10,11 @@ scale = round(2000/8) # size of marker in pixels, better if proportional to numb
 nb_w = 4
 nb_h = 3
 margin = round(1/3 *scale)
-startId = 71
+startId = 201
 aruco_dict = aruco.Dictionary_get(aruco.DICT_6X6_250)
 ids, corners = getGridMarkers(nb_w, nb_h, scale, margin, startId)
 
+ids = [201]*6+[202]*6
 for i in range(len(ids)):
 	markerimg = aruco.drawMarker(aruco_dict, ids[i], scale)
 	
