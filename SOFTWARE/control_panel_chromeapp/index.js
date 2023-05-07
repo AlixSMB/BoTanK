@@ -457,6 +457,12 @@ class Tank{
 					n: DEFAULT_NBMARKERS_PER_OBST,
 					collider: DEFAULT_MARKEDOBST_COLLIDER
 				}
+			},
+			camera: {
+				db_view: {on: false},
+				treshold_min: null,
+				treshold_max: null,
+				treshold_const: null
 			}
 		};
 		
@@ -581,13 +587,18 @@ class Tank{
 		for (let line of msg.split('\n')){
 			if (line == "") continue;
 			
-			let [keys, vals] = line.split(';').map( el => el.split('|') );
+			let parts = line.split(';');
+			let keys = parts[0] ; let vals = parts[1];
+			
+			keys = keys.split(',');
 			
 			let obj = obj_get(this.data, keys.slice(0,-1));
 			let key = arr_last(keys);
 			
-			if (vals.length == 1){ // single value or 1 dimensional array
-				vals = vals[0].split(',');
+			let is2d = parts.length == 3; // 1d or 2d array
+			
+			if (!is2d){ // single value or 1 dimensional array
+				vals = vals.split(',');
 				if (vals.length == 1){
 					if (key == 'on') obj[key] = vals[0] == '1' ? true : false;
 					else             obj[key] = Number(vals[0]);
@@ -596,7 +607,7 @@ class Tank{
 			}
 			
 			else{ // 2D array
-				obj[key] = vals.map( part => part.split(',').map(el => Number(el)) );
+				obj[key] = vals.split('|').map(str => str.split(',').map(el => Number(el)));
 			}
 		}
 	}
@@ -735,6 +746,7 @@ class Tank{
 			// set values
 			getdom(`.div_tank[tankid="${this.id}"] .btn_ok`).slice(1).forEach(el => el.click()); // all buttons except first [!] should be tank addr input [!]
 			getdom(`.div_tank[tankid="${this.id}"] .div_radiozone input:checked`).forEach(el => el.dispatchEvent(new Event("change")));
+			getdom(`.div_tank[tankid="${this.id}"] .check_db_view`)[0].dispatchEvent(new Event("change"));
 		});
 		
 	}
@@ -871,10 +883,20 @@ class Tank{
 		ctx.overlay.strokeStyle = this.color;
 		ctx.overlay.lineWidth = 4;
 		let obj = this.data.obstacles.marked.obj;
-		if (this.data.obstacles.marked.collider == 'AABB'){
+		let collider = this.data.obstacles.marked.collider;
+		if (collider == 'AABB'){
 			for (let i=0; i<obj.length; i+=4){
 				ctx.main.beginPath();
 				ctx.main.rect(obj[i]*pxPerM, obj[i+1]*pxPerM, (obj[i+2]-obj[i])*pxPerM, (obj[i+3]-obj[i+1])*pxPerM);
+				ctx.main.stroke();
+			}
+		}
+		else if (collider == 'Hull'){
+			for (let obst of obj){
+				ctx.main.beginPath();
+				ctx.main.moveTo(obst[0]*pxPerM, obst[1]*pxPerM);
+				for (let i=2; i<obst.length; i+=2) ctx.main.lineTo(obst[i]*pxPerM, obst[i+1]*pxPerM);
+				ctx.main.closePath();
 				ctx.main.stroke();
 			}
 		}
@@ -1012,6 +1034,7 @@ function addTank(){
 					[tankidattr+" size=1"]
 				)}
 			</div>
+			<input type="checkbox" class="check_db_view" ${tank.data.camera.db_view.on ? "checked" : ""} ${tankidattr}>Debug view
 			<div>
 				<input type="checkbox" class="check_camera" ${tank.cam.on ? "checked" : ""}>Camera feed:
 				<div class="div_videofeed resizable" ${tankidattr}>
@@ -1051,10 +1074,10 @@ function addTank(){
 	, 1, tankdiv, '.input_autoparams');
 	set_inputzonebtns_callbacks(
 		nodes => tank.sendOptsSET(['markers', 'ids_range'], nodes.map(node => Number(node.value)))
-	, 1, tankdiv, '.input_posmarkersidrange');
+	, 2, tankdiv, '.input_posmarkersidrange');
 	set_inputzonebtns_callbacks(
 		nodes => tank.sendOptsSET(['obstacles', 'marked', 'ids_range'], nodes.map(node => Number(node.value)))
-	, 1, tankdiv, '.input_obstmarkersidrange');
+	, 2, tankdiv, '.input_obstmarkersidrange');
 	set_inputzonebtns_callbacks(
 		nodes => tank.sendOptsSET(['obstacles', 'marked', 's'], Number(nodes[0].value))
 	, 1, tankdiv, '.input_markedobst_size');
@@ -1132,6 +1155,9 @@ function addTank(){
 	getdom('.btn_picktrajectory', tankdiv)[0].addEventListener('click', function(){
 		if (trajectorypicker_tank == tank) unlatch_trajectorypicker();
 		else                               latch_trajectorypicker(tank, this);
+	});
+	getdom('.check_db_view', tankdiv)[0].addEventListener('change', function(){
+		tank.sendOptsSET(['camera', 'db_view', 'on'], this.checked);
 	});
 }
 
@@ -1264,8 +1290,12 @@ function drawOverlay(){
 			ctx.overlay.stroke();
 			
 			if (tank.data.markers.disp_ids){
-				ctx.overlay.font = `${Math.max(9,Math.round(Math.min(Math.abs(x2-x1), Math.abs(y4-y1))))}px sans serif`;
-				ctx.overlay.fillText(ids[i], x4+3, Math.round((y4+y1)/2)+5);
+				let xmin = Math.min(x1, x2, x3, x4); let xmax = Math.max(x1, x2, x3, x4); // AABB of marker
+				let ymin = Math.min(y1, y2, y3, y4); let ymax = Math.max(y1, y2, y3, y4); // 
+				let s = Math.min(xmax-xmin, ymax-ymin)-3;
+				
+				ctx.overlay.font = `${s}px sans serif bold`;
+				ctx.overlay.fillText(ids[i], xmin+3, ymax-3);
 			}
 		}
 	}
