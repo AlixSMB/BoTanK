@@ -36,7 +36,7 @@ services:
                     driver: nvidia
                     count: all
  
-      working_dir: /home/${BOTANK_USER}/botank/Repo/
+      working_dir: /home/${BOTANK_USER}/botank/SOFTWARE/
       volumes:
          - ~/:/home/${BOTANK_USER}
          # import users and groups
