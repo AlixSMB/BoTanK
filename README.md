@@ -18,3 +18,5 @@ Projet tank intelligent
 
 ## Déplacement autonome
 - Utilisation de marqueurs Aruco
+- - Grille de positionnement prédéfinie ou construite à partir du tank
+- Obstacles virtuels 
