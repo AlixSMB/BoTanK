@@ -26,5 +26,5 @@ Projet tank intelligent
 - Suivi de trajectoire
 
 - Evitement d'obstacles
- - Virtuels, définis via l'interface
- - Codés avec marqueurs 
+  - Virtuels, définis via l'interface
+  - Codés avec marqueurs 
