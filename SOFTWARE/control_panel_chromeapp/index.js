@@ -12,10 +12,9 @@ const ARUCO_GRID_NBH = 5;
 const ARUCO_GRID_CSIZE = 0.0366; // cell size in meters
 const ARUCO_GRID_CMARGIN = ARUCO_GRID_CSIZE;
 
-// default marked obstacles size
+// default marked obstacles
 const ARUCO_OBST_SIZE = 0.05; // m
-const DEFAULT_NBMARKERS_PER_OBST = 6;
-const DEFAULT_MARKEDOBST_COLLIDERS = ['AABB', 'Hull', 'Sphere'];
+const DEFAULT_MARKEDOBST_COLLIDERS = ['AABB', 'Hull'];
 const DEFAULT_MARKEDOBST_COLLIDER = 'AABB';
 
 // default marker ids
@@ -454,7 +453,6 @@ class Tank{
 					obj: [],
 					ids_range: DEFAULT_MIDRANGE_OBST,
 					s: ARUCO_OBST_SIZE,
-					n: DEFAULT_NBMARKERS_PER_OBST,
 					collider: DEFAULT_MARKEDOBST_COLLIDER
 				}
 			},
@@ -632,7 +630,12 @@ class Tank{
 	getOptsAutoMarkers(msg){
 		let mids = [];
 		let cornersAll = [];
-		for (let line of msg.split('\n').splice(1)){
+		
+		let parts = msg.split('\n');
+		let allids = parts[1].split(';')[1];
+		getdom(`.div_tank[tankid="${this.id}"] .nb_markers`)[0].innerHTML = allids == '' ? 0 : Number(allids.split(',').length);
+		
+		for (let line of parts.splice(2)){
 			if (line == "") continue;
 			
 			let [mid, corners] = line.split(';;');
@@ -642,7 +645,8 @@ class Tank{
 		
 		this.data.markers.auto.corners = cornersAll;
 		this.data.markers.auto.ids = mids;
-		getdom(`.div_tank[tankid="${this.id}"] .nb_markers`)[0].innerHTML = mids.length;
+		getdom(`.div_tank[tankid="${this.id}"] .nb_markers_used`)[0].innerHTML = mids.length;
+		getdom(`.div_tank[tankid="${this.id}"] .marker_orig`)[0].innerHTML = Math.min(...mids);
 		drawOverlay();
 	}
 	getOptsCurrentTrajPnt(msg){
@@ -883,25 +887,12 @@ class Tank{
 		ctx.overlay.strokeStyle = this.color;
 		ctx.overlay.lineWidth = 4;
 		let obj = this.data.obstacles.marked.obj;
-		let collider = this.data.obstacles.marked.collider;
-		if (collider == 'AABB'){
-			for (let i=0; i<obj.length; i+=4){
-				ctx.main.beginPath();
-				ctx.main.rect(obj[i]*pxPerM, obj[i+1]*pxPerM, (obj[i+2]-obj[i])*pxPerM, (obj[i+3]-obj[i+1])*pxPerM);
-				ctx.main.stroke();
-			}
-		}
-		else if (collider == 'Hull'){
-			for (let obst of obj){
-				ctx.main.beginPath();
-				ctx.main.moveTo(obst[0]*pxPerM, obst[1]*pxPerM);
-				for (let i=2; i<obst.length; i+=2) ctx.main.lineTo(obst[i]*pxPerM, obst[i+1]*pxPerM);
-				ctx.main.closePath();
-				ctx.main.stroke();
-			}
-		}
-		else{ // Sphere
-			
+		for (let obst of obj){
+			ctx.main.beginPath();
+			ctx.main.moveTo(obst[0]*pxPerM, obst[1]*pxPerM);
+			for (let i=2; i<obst.length; i+=2) ctx.main.lineTo(obst[i]*pxPerM, obst[i+1]*pxPerM);
+			ctx.main.closePath();
+			ctx.main.stroke();
 		}
 		ctx.main.restore();
 	}
@@ -990,7 +981,8 @@ function addTank(){
 						)}m
 						<br><button class="btn_addmarkers">Add markers <img src='res/xbox_btn_Y.svg' class="xbox_btn"></button>
 						<input type="button" class="btn_resetmarkers" value="Reset markers"><br>
-						<span class="nb_markers">0</span> markers found
+						<span class="nb_markers">0</span> markers found<br>
+						<span class="nb_markers_used">0</span> markers used with origin at marker n°<span class="marker_orig">0</span>
 					</div>
 				</div>	
 			</details>
@@ -1021,7 +1013,7 @@ function addTank(){
 					<br>Cell size: ${html_inputzone(
 						1, 'input_markedobst_size',
 						[tank.data.obstacles.marked.s], [tankidattr+' size=2']
-					)}m (including white margin)
+					)}m
 					<br><br>Collider: ${html_radiozone("radio_markedobstmode", DEFAULT_MARKEDOBST_COLLIDERS, DEFAULT_MARKEDOBST_COLLIDERS.indexOf(tank.data.obstacles.marked.collider), tankidattr)}
 				</details>
 			</details>	
@@ -1243,7 +1235,7 @@ function unlatch_trajectorypicker(){
 	});
 	
 	let textarea = getdom(`.input_trajectory[tankid='${trajectorypicker_tank.id}']`)[0];
-	textarea.value = mouse.last_clicks.map(pos => pos.slice(0,2).join(',')).join(',');
+	textarea.value = mouse.last_clicks.map(pos => pos.slice(0,2).map(el=>el.toFixed(4)).join(',')).join(',');
 	textarea.dispatchEvent(new Event("input"));
 	getdom('.btn_ok', textarea.parentNode)[0].click();
 	
@@ -1486,6 +1478,7 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
+	. fix reverse drive mode
 	. add ability to delete specific markers from auto board
 	. add cannon behavior	
 	. add support for multiple tanks (using different ports ?) (using udp broadcast to set ports ?)
