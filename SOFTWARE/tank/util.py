@@ -19,8 +19,9 @@ def dict_get(dictio, keys):
         dictio = dictio[key]
     return dictio
 
-def clamp(a, b, x):
-	return max(a, min(x, b))
+def replace(arr, old , new) : arr[arr.index(old)] = new
+
+def clamp(a, b, x) : return max(a, min(x, b))
 
 timers = {}
 def set_timer(name, dt): # in s

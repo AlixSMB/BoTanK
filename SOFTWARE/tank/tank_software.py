@@ -102,7 +102,6 @@ def recv_setdata(lines):
 def recv_move_data(server):
 	msg = server.recv()
 	while msg is not None:
-	#if msg is not None:
 		recv_setdata(msg.decode('ascii').split('\n'))
 		msg = server.recv()
 def recv_opts_data(server):
@@ -141,13 +140,15 @@ def recv_opts_data(server):
 		elif lines[0] == 'SETMARKERS':
 			mids = []
 			cornersAll = []
+			boolUpdate = False
 			for line in lines[1:]:
 				if line == '' : continue
+				boolUpdate = True
 				mtype, mid, corners = line.split(';;');
 				mids.append(int(mid))
 				cornersAll.append([ [float(val) for val in corner.split(',')] for corner in corners.split(';') ])
 				
-			data['markers'][mtype].onchange(mtype, mids, cornersAll)
+			if boolUpdate : data['markers'][mtype].onchange(mtype, mids, cornersAll)
 			server.send(b'OK\n\n')
 		
 		elif lines[0] == 'DO':
@@ -155,7 +156,7 @@ def recv_opts_data(server):
 			if lines[1] == 'SNAPAUTOBOARD':
 				if auto_make_board(
 					cameradata, camera_frame, data['markers']['auto'], data['markers']['auto_s'].val,
-					corners, ids, data['markers']['ids_range'].val, None
+					corners, ids, data['markers']['ids_range'].val
 				):
 					send_auto_markers()
 				server.send(b'OK\n\n')
@@ -264,7 +265,7 @@ def sdf_vect_aarect(r1x,r1y, r2x,r2y, px,py): # axis aligned rectangle
 	return (rectdir, rectdist)
 def sdf_vect_rect(r, px,py): # rotated rectangle
 	# local axes of rect.
-	rX = [r[6]-r[0], r[i+7]-r[1]]
+	rX = [r[6]-r[0], r[7]-r[1]]
 	rXdist = math.sqrt(rX[0]**2 + rX[1]**2)
 	rX[0] /= rXdist ; rX[1] /= rXdist
 	rY = [r[2]-r[0], r[3]-r[0]]
@@ -328,7 +329,7 @@ def influence_inv_vect(v1, v2, v2dist, w):
 	dist = math.sqrt(v1[0]**2 + v1[1]**2)
 	v1[0] /= dist ; v1[1] /= dist
 
-minDistTarget = 0.03 # 3cm around target means the destination is reached
+minDistTarget = 0.05 
 slowDownDist = 0.08 # start slowing down at this distance to target
 def auto_goto_point(target):
 	moveDir = [target[0]-transfo[0][0], target[1]-transfo[0][1]]
@@ -336,6 +337,7 @@ def auto_goto_point(target):
 	moveDir[0] /= moveDist ; moveDir[1] /= moveDist
 	
 	speed = data['move']['auto']['speed'].val
+	rotspeed = data['move']['auto']['rotspeed'].val
 	
 	# we have arrived at target
 	if moveDist <= minDistTarget : return True
@@ -344,14 +346,14 @@ def auto_goto_point(target):
 	#if moveDist >= slowDownDist : speed = min( speed, max(0.15, moveDist/slowDownDist*0.5) )
 	
 	# influence of virtual obstacles on movement direction
-	w = data['obstacles']['virtual']['w'] # obstacle weight
+	w = data['obstacles']['virtual']['w'].val # obstacle weight
 	rects = data['obstacles']['virtual']['rects'].val
 	for i in range(0,len(rects),8) : influence_inv_vect(moveDir, *sdf_vect_rect(rects[i:i+8], *transfo[0][:2]), w)
 	lines = data['obstacles']['virtual']['lines'].val
 	for i in range(0,len(lines),4) : influence_inv_vect(moveDir, *sdf_vect_line(*lines[i:i+4], *transfo[0][:2]), w)
 	
 	# influence of marked obstacles on movement direction
-	w = data['obstacles']['marked']['w'] # obstacle weight
+	w = data['obstacles']['marked']['w'].val # obstacle weight
 	obj =  data['obstacles']['marked']['obj']
 	if obj.collider == 'Hull':
 		for obstacle in obj.val.values() : influence_inv_vect(moveDir, *sdf_vect_polygon(obstacle, *transfo[0][:2]), w) 
@@ -365,8 +367,10 @@ def auto_goto_point(target):
 	# projection of target on those axes
 	moveX = moveDir[0]*tankX[0] + moveDir[1]*tankX[1]
 	moveY = moveDir[0]*tankY[0] + moveDir[1]*tankY[1]
+	
 	# almost same as the corresponding gamepad javascript code
 	angle = math.atan2(moveY, moveX)
+	#speed = speed if angle > 0 else rotspeed
 	if angle >= -math.pi/2 and angle <= math.pi/2 : set_move_vel([moveY*speed, speed])
 	else                                          : set_move_vel([speed, moveY*speed])
 	
@@ -382,7 +386,13 @@ def startMoveAuto():
 def stopMoveAuto():
 	data['move']['auto']['run'] = False
 	set_move_vel([0,0])
+def tmpContinueMoveAuto():
+	data['move']['auto']['tmp_stopped'] = False
+def tmpStopMoveAuto():
+	data['move']['auto']['tmp_stopped'] = True
+	set_move_vel([0,0])
 def auto_move():
+	if data['move']['auto']['tmp_stopped'] : return
 	if not data['move']['auto']['run'] : return
 	
 	if data['move']['auto']['type'].val == 'target':
@@ -422,12 +432,14 @@ data = {
 			'type': Object(val='target', onchange=update_data),
 			
 			'run': False,
+			'tmp_stopped': False,
 			
 			'target': Object(val=[0,0], onchange=update_data),
 			'trajectory': Object(val=[], onchange=update_data),
 			'current_trajpnt': Object(val=0, onchange=update_current_trajpnt), # start point and end point of this segment
 			
-			'speed': Object(val=0.3, onchange=update_data) 
+			'speed': Object(val=0.3, onchange=update_data),
+			'rotspeed': Object(val=0.25, onchange=update_data)
 		}
 	},
 	'cannon': {
@@ -449,18 +461,19 @@ data = {
 		'auto_s': Object(val=0.035, onchange=update_auto_markers_size), # 3.5 centimeters by default, modifiable by control panel
 		'auto': newAutoBoard(),
 		
-		'grid': Object(cells={}, onchange=update_markers) 
+		'grid':   Object(cells={}, onchange=update_markers),
+		'custom': Object(cells={}, onchange=update_markers)
 	},
 	'obstacles': {
 		'virtual': {
 			'rects': Object(val=[], onchange=update_data),
 			'lines': Object(val=[], onchange=update_data),
-			'w': 1, # "weight" of virtual obstacle
+			'w': Object(val=1, onchange=update_data), # "weight" of virtual obstacle
 		},
 		'marked': {
 			'obj': Object(val={}, collider='AABB'), # id->points
 			'ids_range': Object(val=[201, 249], onchange=update_obst_markers_range),
-			'w': 1,
+			'w': Object(val=1, onchange=update_data),
 			's': Object(val=0.05, onchange=update_data),
 			'collider': Object(val='AABB', onchange=update_data) # bounding shape of the obstacles
 		}
@@ -479,15 +492,14 @@ set_timer('stream_imgframe', 1/11) # 11 fps
 set_timer('movedata', 1/10) # 10 fps
 
 transfo = None # default transfo
-lost = 0
-maxlost = 20 # max number of consecutive failures to get pos.
 corners = [] ; ids = []
 
 while True:
 	timers_start()
 
 	# read new camera frame
-	if check_timer('movedata'):	
+	#if check_timer('movedata'):
+	if True:	
 		ret, camera_frame = cap.read()
 		if not ret: 
 			print("Camera error, quitting...")
@@ -498,20 +510,15 @@ while True:
 		#camera_frame = fisheye_undistort(cameradata, cv2.threshold(cv2.cvtColor(camera_frame,cv2.COLOR_BGR2GRAY),10,255,cv2.THRESH_BINARY)[1])
 		
 		# compute tank pos, speed
-		corners, ids = getMarkers(cameradata, camera_frame, aruco_dict, None, data['camera']['db_view']['on'].val)
+		corners, ids = getMarkers(cameradata, camera_frame, aruco_dict, data['camera']['db_view']['on'].val)
 		if current_mobj is not None:
 			res = getBoardTransform(cameradata, camera_frame, current_mobj, transfo, corners, ids, data['camera']['db_view']['on'].val)
 
 			if res is None:
-				lost += 1
-				if lost == maxlost:
-					lost = 0
-					transfo = None
-					
-					if data['move']['auto']['run'] : stopMoveAuto()
-			else: 
-				lost = 0
+				if data['move']['auto']['run'] : tmpStopMoveAuto()
+			else:
 				transfo = res
+				tmpContinueMoveAuto()
 			
 			if transfo is not None:
 				data['move']['real']['pos'].val = transfo[0][:2]
@@ -554,8 +561,7 @@ while True:
 #		- use dict for url dispatcher ?
 #	- handle timers differently ?
 
-# add more info when sending auto markers data
-# limit rotation speed
+# limit rotation speed ?
 # add obstacle smoothing / remain delay ?
 # add flashlight to jetbot ?
 # finish detector perameters customization

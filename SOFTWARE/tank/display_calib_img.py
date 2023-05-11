@@ -2,19 +2,32 @@ import numpy as np
 import cv2
 
 # screen pixels size
-screenname = 'VS228N'
-diagonal = 0.546 # m
-wpx = 1920
-hpx = 1080
-diagonalpx = (wpx**2 + hpx**2)**(1/2)
-pxPerM = diagonalpx/diagonal
+#screenname = 'VS228N'
+#diagonal = 0.546 # m
+#wpx = 1920
+#hpx = 1080
+#diagonalpx = (wpx**2 + hpx**2)**(1/2)
+#pxPerM = diagonalpx/diagonal
+screenname = 'LAPTOP HP'
+diagonal = 0.3556 # m
+hauteur = 0.174 # m
+wpx = 1366
+hpx = 768
+pxPerM = hpx/hauteur
+#screenname = 'GL2580HM'
+#diagonal = 0.6223 # m
+#wpx = 1920
+#hpx = 1080
+#diagonalpx = (wpx**2 + hpx**2)**(1/2)
+#pxPerM = diagonalpx/diagonal
+
 print(f"Using config for \"{screenname}\" screen")
 
 chess_s = 0.02 # cell size in meters
 print(f"Using a cell size of {chess_s} m")
 chess_s_px = round(chess_s*pxPerM)
-chess_w = 20
-chess_h = 10
+chess_w = 13
+chess_h = 7
 print(f"Using a {chess_w}x{chess_h} grid")
 
 margin = 50 # px

@@ -10,31 +10,35 @@ import math
 
 detect_params = aruco.DetectorParameters_create()
 #detect_params.adaptiveThreshConstant = 1
-detect_params.cornerRefinementMethod = aruco.CORNER_REFINE_SUBPIX
-max_reprerr = 0.4
+#detect_params.cornerRefinementMethod = 3 # too slow
+max_reprerr = 1.
 
-def getTransformationMatrix(rvec, tvec, rmat=None):    # rvec and tvec straight from opencv function (with the weird shapes)
+def getTransformationMatrix(rvec, tvec):    # rvec and tvec straight from opencv function (with the weird shapes)
 	# get rotation matrix from rotation vector
-	rmat = cv2.Rodrigues(rvec)[0] if rmat is None else rmat
+	rmat = cv2.Rodrigues(rvec)[0]
 	transfo = np.zeros((4,4), np.float32)
 	transfo[3,3] = 1
-	transfo[0:3, 0:3] = rmat
-	transfo[0:3, 3] = np.squeeze(tvec)
+	transfo[:3, :3] = rmat
+	transfo[:3, 3] = np.squeeze(tvec)
 	return transfo
-def getInvTransformationMatrix(rvec, tvec, rmat=None): #
-	# get rotation matrix from rotation vector
-	rmat = cv2.Rodrigues(rvec)[0] if rmat is None else rmat
-	# get inverse of rotation matrix: inv(R) = transpose(R)
-	invRMat = np.transpose(rmat)
+def getInvTransformationMatrix(rvec=None, tvec=None, mat=None): #
+	if mat is not None:
+		invRMat = np.transpose(mat[:3,:3])
+		tvec = mat[0:3, 3]
+	else:
+		# get rotation matrix from rotation vector
+		rmat = cv2.Rodrigues(rvec)[0]
+		# get inverse of rotation matrix: inv(R) = transpose(R)
+		invRMat = np.transpose(rmat)
 	# get inverse of tranformation matrix (rotation + translation)
 	# we use a fast method: https://stackoverflow.com/questions/2624422/efficient-4x4-matrix-inverse-affine-transform
 	invTransfo = np.zeros((4,4), np.float32)
 	invTransfo[3,3] = 1
-	invTransfo[0:3, 0:3] = invRMat
-	invTransfo[0:3, 3] = np.matmul(-invRMat, np.squeeze(tvec))
+	invTransfo[:3, :3] = invRMat
+	invTransfo[:3, 3] = np.matmul(-invRMat, np.squeeze(tvec))
 	return invTransfo
 
-def getMarkers(cameradata, videoframe, dictio, transfo, dbview=False):
+def getMarkers(cameradata, videoframe, dictio, dbview=False):
 	res = [[], []] # [corners, ids]
 	corners, ids, rejectedCorners = aruco.detectMarkers(videoframe, dictio, parameters=detect_params)
 	if ids is not None and len(corners) > 0:
@@ -45,8 +49,7 @@ def getMarkers(cameradata, videoframe, dictio, transfo, dbview=False):
 			
 			local_corners = np.array([[0,0,0,1],[1,0,0,1],[1,1,0,1],[0,1,0,1]], dtype=np.float32) # CW top left order, x right, y bottom [x,y,z,1]*4
 			for i in range(len(ids)):
-				if transfo is not None : _, rvec, tvec, reprErr = cv2.solvePnPGeneric(np.array(local_corners[:,:3]), corners[i][0], cameradata['matrix'], cameradata['coeffs'], useExtrinsicGuess=True, flags=cv2.SOLVEPNP_ITERATIVE, rvec=transfo[4], tvec=transfo[5])
-				else                   : _, rvec, tvec, reprErr = cv2.solvePnPGeneric(np.array(local_corners[:,:3]), corners[i][0], cameradata['matrix'], cameradata['coeffs'], flags=cv2.SOLVEPNP_ITERATIVE)
+				_, rvec, tvec, reprErr = cv2.solvePnPGeneric(np.array(local_corners[:,:3]), corners[i][0], cameradata['matrix'], cameradata['coeffs'], flags=cv2.SOLVEPNP_ITERATIVE)
 				
 				if np.squeeze(reprErr) <= max_reprerr : cv2.drawFrameAxes(videoframe, cameradata['matrix'], cameradata['coeffs'], rvec[0], tvec[0], 1)
 	
@@ -56,24 +59,24 @@ def update_marker(m_obj, mid, oid, newTransMat, local_corners, isGlobalOrig): # 
 	marker_i = m_obj.cells_i[mid]
 	orig_i   = m_obj.cells_i[oid]
 	
-	if marker_i.out_ref is not None : m_obj.cells_i[marker_i.out_ref].in_refs.remove(mid)
+	if marker_i.out_ref is not None : util.replace(m_obj.cells_i[marker_i.out_ref].in_refs, mid, None)		
 	marker_i.out_ref = oid
 	orig_i.in_refs.append(mid)
 	
-	marker_i.transitionMat = newTransMat
+	marker_i.mat = newTransMat
 	# express points from local coords system to orig marker coords system
 	for n in range(4): 
-		m_obj.cells_tmp[mid][n] = np.matmul(marker_i.transitionMat, local_corners[n])[:3]
+		m_obj.cells_tmp[mid][n] = np.matmul(marker_i.mat, local_corners[n])[:3]
 		#m_obj.cells_tmp[mid][n][2] = 0 # planar board
 	if isGlobalOrig : m_obj.cells[mid] = np.copy(m_obj.cells_tmp[mid])
 	
 	# update markers whose position is based on this one's
 	for rid in marker_i.in_refs:
+		if rid is None : continue
 		refm_i = m_obj.cells_i[rid]
-		update_marker(m_obj, rid, oid, np.matmul(marker_i.transitionMat, refm_i.transitionMat), np.copy(local_corners), isGlobalOrig) # recurse
-# generate corners and ids automatically from frames, using relative distances between markers ; all the markers must have the same known size
-# "m_obj.cells" will contain all the markers which are positioned relative to the board origin marker (i.e: the marker with the smallest id)
-def auto_make_board(cameradata, videoframe, m_obj, ms, corners, ids, mrange, transfo):
+		update_marker(m_obj, rid, oid, np.matmul(marker_i.mat, refm_i.mat), np.copy(local_corners), isGlobalOrig) # recurse
+# tree structures with one origin and a single row of child nodes
+def auto_make_board(cameradata, videoframe, m_obj, ms, corners, ids, mrange):
 	
 	if len(ids) <= 1 : return False
 	
@@ -83,8 +86,7 @@ def auto_make_board(cameradata, videoframe, m_obj, ms, corners, ids, mrange, tra
 	for i in range(len(ids)):
 		if ids[i][0] < mrange[0] or ids[i][0] > mrange[1] : continue # not a marker used for positioning 
 		
-		if transfo is not None : _, rvec, tvec, reprErr = cv2.solvePnPGeneric(np.array(local_corners[:,:3]), corners[i][0], cameradata['matrix'], cameradata['coeffs'], useExtrinsicGuess=True, flags=cv2.SOLVEPNP_ITERATIVE, rvec=transfo[4], tvec=transfo[5])
-		else                   : _, rvec, tvec, reprErr = cv2.solvePnPGeneric(np.array(local_corners[:,:3]), corners[i][0], cameradata['matrix'], cameradata['coeffs'], flags=cv2.SOLVEPNP_ITERATIVE)
+		_, rvec, tvec, reprErr = cv2.solvePnPGeneric(np.array(local_corners[:,:3]), corners[i][0], cameradata['matrix'], cameradata['coeffs'], flags=cv2.SOLVEPNP_ITERATIVE)
 		
 		if np.squeeze(reprErr) <= max_reprerr : 
 			keptIds.append(ids[i][0])
@@ -99,9 +101,9 @@ def auto_make_board(cameradata, videoframe, m_obj, ms, corners, ids, mrange, tra
 			m_obj.cells_i[mid] = Object(
 				in_refs=[],        # markers positioned relative to us (all should be relative to marker 0 once mapping is done)
 				out_ref=None,      # marker we are positionned relative to
-				transitionMat=None # [transitionMat] * [local pos] = [ref pos]
+				mat=None # marker coords to orig coord transition matrix
 			)
-		
+	
 	# get orig for this shot
 	orig_ind = np.argmin(keptIds)
 	orig_id = keptIds[orig_ind]
@@ -114,7 +116,7 @@ def auto_make_board(cameradata, videoframe, m_obj, ms, corners, ids, mrange, tra
 	
 	# get transition mat.
 	if orig_ref is not None:
-		orig_invTransfo = np.matmul(m_obj.cells_i[orig_id].transitionMat, getInvTransformationMatrix(rvecs[orig_ind], tvecs[orig_ind]))
+		orig_invTransfo = np.matmul(m_obj.cells_i[orig_id].mat, getInvTransformationMatrix(rvecs[orig_ind], tvecs[orig_ind]))
 		orig_id = orig_ref
 	else:
 		orig_invTransfo = getInvTransformationMatrix(rvecs[orig_ind], tvecs[orig_ind])
@@ -132,39 +134,56 @@ def auto_make_board(cameradata, videoframe, m_obj, ms, corners, ids, mrange, tra
 		marker_i = m_obj.cells_i[mid]
 		if marker_i.out_ref == orig_id : continue
 		
-		update_marker(
-			m_obj, mid, orig_id, 
-			np.matmul(orig_invTransfo, getTransformationMatrix(rvecs[i], tvecs[i])),
-			np.copy(local_corners), m_obj.orig == orig_id
-		)
+		# this marker is positioned relative to an origin, we must update this marker's origin, 
+		# which will then update its own atached child markers (including this marker)
+		if marker_i.out_ref is not None:
+				update_marker(
+				m_obj, marker_i.out_ref, orig_id, 
+				np.matmul( orig_invTransfo, np.matmul(getTransformationMatrix(rvecs[i], tvecs[i]), getInvTransformationMatrix(mat=marker_i.mat)) ),
+				np.copy(local_corners), m_obj.orig == orig_id
+			)
+		# this marker doesn't have an origin, we must update it and its attach child markers
+		else:
+			update_marker(
+				m_obj, mid, orig_id, 
+				np.matmul(orig_invTransfo, getTransformationMatrix(rvecs[i], tvecs[i])),
+				np.copy(local_corners), m_obj.orig == orig_id
+			)
+	
+	# remove cells that where detached from markers
+	for key in m_obj.cells_i:
+		filter(lambda el: el is not None, m_obj.cells_i[key].in_refs)
 	
 	return True
 
 # get pos / rot of camera relative to board, the video frame should be distorsion free ! 
 def getBoardTransform(cameradata, videoframe, board, transfo, corners, ids, dbview=False):	
 	if len(board.cells) == 0 or len(ids) == 0 : return None
-		
-	objpoints = []
-	imgpoints = []
+	
+	imgpoints = None ; objpoints = None
+	maxArea = 0 ; keptI=0
 	for i in range(len(ids)):
 		mid = ids[i][0]
 		if not (mid in board.cells) : continue
-		for pnt in board.cells[mid] : objpoints.append(pnt)
-		for corner in corners[i][0] : imgpoints.append(corner)
-	if len(objpoints) == 0 : return None
-	objpoints = np.array(objpoints, dtype=np.float32)
-	imgpoints = np.array(imgpoints, dtype=np.float32)
+		
+		p = corners[i][0][1:] - corners[i][0][:1]
+		area = (np.linalg.det(p[:-1]) + np.linalg.det(p[1:])) / 2
+		if area > maxArea:
+			imgpoints = corners[i][0][np.newaxis]
+			objPoints = np.array([board.cells[mid]], dtype=np.float32)
+			maxArea = area
+			keptI = i
 	
-	if transfo is not None : _, rvec, tvec, reprErr = cv2.solvePnPGeneric(objpoints, imgpoints, cameradata['matrix'], cameradata['coeffs'], useExtrinsicGuess=True, flags=cv2.SOLVEPNP_ITERATIVE, rvec=transfo[4], tvec=transfo[5])
-	else                   : _, rvec, tvec, reprErr = cv2.solvePnPGeneric(objpoints, imgpoints, cameradata['matrix'], cameradata['coeffs'], flags=cv2.SOLVEPNP_ITERATIVE)
+	if objPoints is None : return None
+	#aruco.drawDetectedMarkers(videoframe, np.array([corners[keptI]], dtype=np.float32), np.array([ids[keptI]], dtype=np.float32))
+	_, rvec, tvec, reprErr = cv2.solvePnPGeneric(objPoints, imgpoints, cameradata['matrix'], cameradata['coeffs'], flags=cv2.SOLVEPNP_ITERATIVE)
 	rvec = np.array(rvec[0], dtype=np.float32)
 	tvec = np.array(tvec[0], dtype=np.float32)
 	
 	if dbview : cv2.drawFrameAxes(videoframe, cameradata['matrix'], cameradata['coeffs'], rvec, tvec, 0.1)
 	
-	rmat = cv2.Rodrigues(rvec)[0]
-	newTransfo = getTransformationMatrix(rvec, tvec, rmat)
-	invTransfo = getInvTransformationMatrix(rvec, tvec, rmat)
+	newTransfo = getTransformationMatrix(rvec, tvec)
+	invTransfo = getInvTransformationMatrix(None, None, newTransfo)
 	
 	# get cam pos (transform [0,0,0] from cam coords to board coords)
 	cam_pos = np.matmul(invTransfo, np.array([0,0,0,1]))
@@ -229,9 +248,8 @@ def getMarkedObstacles(cameradata, videoframe, mrange, s, collider, transfo, cor
 	return Object(val=obstacles, collider=collider)
 
 
-# NOTE:
-# - oldrvec / oldtvec shouldn't be used for auto_make_board and getMarkers but it seems to work fine...
-
 # TODO:
+# - filtrer bon markeurs par rapport à aire
+# - optimize auto_make_board ?
 # - allow different sized markers, provide size for each marker
 # - enable cornerRefinement ?

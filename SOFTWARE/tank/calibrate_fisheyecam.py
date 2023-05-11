@@ -12,8 +12,8 @@ print(f"Using {len(img_samples)} images of size {img_size}")
 
 chess_s = 0.02 # cell size in meters
 print(f"Using a cell size of {chess_s} m")
-chess_w = 20
-chess_h = 10
+chess_w = 13
+chess_h = 7
 cb_corners = np.asarray([getChessBoardCorners(chess_w, chess_h, chess_s)], np.float32)
 print(f"Using a {chess_w}x{chess_h} grid")
 
@@ -71,7 +71,7 @@ cameraparams['coeffs'] = coeffs
 
 # export params to file
 i=1
-filename = f"laptopcam_fisheye_params_"
+filename = f"phone_fisheye_params_"
 while os.path.exists(filename+str(i)) : i+=1
 filename += str(i)
 with open(filename, "wb") as filecamera : pickle.dump(cameraparams, filecamera, 0)

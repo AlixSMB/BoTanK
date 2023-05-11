@@ -4,6 +4,7 @@ import cv2.aruco as aruco
 import pickle
 
 from util import Object, fisheye_undistort
+from positioning import getInvTransformationMatrix
 
 
 cap = cv2.VideoCapture(0)
@@ -28,9 +29,12 @@ while True:
 	if ids is not None and len(corners) > 0:
 		aruco.drawDetectedMarkers(videoframe, corners, ids)
 		
-		rvecs, tvecs, objpoints = aruco.estimatePoseSingleMarkers(corners, 0.035, cameradata['matrix'], cameradata['coeffs']) 
-		for i in range(len(ids)) :
-			cv2.drawFrameAxes(videoframe, cameradata['matrix'], cameradata['coeffs'], rvecs[i], tvecs[i], 0.02)
+		retval, rvecs, tvecs, reprErr = cv2.solvePnPGeneric(np.array([[0,0,0], [0.035,0,0], [0.035,0.035,0], [0,0.035,0]], dtype=np.float32), corners[0][0], cameradata['matrix'], cameradata['coeffs'], flags=cv2.SOLVEPNP_IPPE)
+		rvec = rvecs[1] ; tvec = tvecs[1]
+		cv2.drawFrameAxes(videoframe, cameradata['matrix'], cameradata['coeffs'], rvec, tvec, 0.02)
+		
+		invTransfo = getInvTransformationMatrix(rvec, tvec)
+		print(np.matmul(invTransfo, np.array([0,0,0,1]))[:3])
 	
 	cv2.imshow("image", videoframe)
 	keycode = cv2.waitKey(round(1000/30))
@@ -38,7 +42,4 @@ while True:
 
 
 # TODO: 
-# try ransac
 # try auto make board error correction -> compute reprojection error, 
-# calibrate cam with lcd, 
-# try perpendicular markers instead of horizontal
