@@ -12,6 +12,8 @@ const ARUCO_GRID_NBH = 5;
 const ARUCO_GRID_CSIZE = 0.0366; // cell size in meters
 const ARUCO_GRID_CMARGIN = ARUCO_GRID_CSIZE;
 
+const DEFAULT_BOARD_TYPES = ["grid", "custom", "auto"];
+
 // default marked obstacles
 const ARUCO_OBST_SIZE = 0.05; // m
 const DEFAULT_MARKEDOBST_COLLIDERS = ['AABB', 'Hull'];
@@ -442,18 +444,24 @@ class Tank{
 				grid: {
 					corners: [],
 					ids: []
+				},
+				custom: {
+					corners: [],
+					ids: []
 				}
 			},
 			obstacles: {
 				virtual: {
 					rects: [],
-					lines: []
+					lines: [],
+					w: 1
 				},
 				marked: {
 					obj: [],
 					ids_range: DEFAULT_MIDRANGE_OBST,
 					s: ARUCO_OBST_SIZE,
-					collider: DEFAULT_MARKEDOBST_COLLIDER
+					collider: DEFAULT_MARKEDOBST_COLLIDER,
+					w: 1
 				}
 			},
 			camera: {
@@ -761,22 +769,24 @@ class Tank{
 	
 	// return = [left wheel speed, right wheel speed]
 	gamepadStickToVel(vel){
-		vel[0] *= this.gamepad.speed*this.gamepad.dir;
-		vel[1] *= this.gamepad.speed*this.gamepad.dir;
+		vel[0] *= this.gamepad.speed;
+		vel[1] *= this.gamepad.speed;
+		let s = this.gamepad.dir;
 		
 		const DEADZONE = 0.2;
 		let dist = (vel[0]**2 + vel[1]**2)**0.5;
 		if (dist < DEADZONE) return [0,0];
 		
 		let angle = Math.atan2(vel[1], vel[0]);	
-		if (angle >= -Math.PI/2 && angle <= Math.PI/2) return [dist, vel[1]]; // right half
-		else                                           return [vel[1], dist]; // left half
+		if (angle >= -Math.PI/2 && angle <= Math.PI/2) return [s*dist,   s*vel[1]]; // right half
+		else                                           return [s*vel[1], s*dist  ]; // left half
 	}
 	updateGamepadData(){
 		if (!this.gamepad.on || this.gamepad.obj == null) return; 
 		this.gamepad.obj = navigator.getGamepads()[this.gamepad.ind];
 		
 		this.data.move.com.vel = this.gamepadStickToVel([this.gamepad.obj.axes[0], -this.gamepad.obj.axes[1]]);
+		this.data.cannon.com.yaw = Math.atan2(this.gamepad.obj.axes[3], this.gamepad.obj.axes[2]);
 		
 		let mappings = [
 			[GAMEPAD_Y_BTN, this.snapAutoMarker.bind(this)], 
@@ -813,8 +823,9 @@ class Tank{
 		
 		this.sendOptsSET(['markers', 'type'], type)
 		
-		if (type == 'grid') getdom(`.div_tank[tankid="${this.id}"] .grid_params .btn_ok`)[0].click(); // regen grid and send it
-		else drawOverlay();
+		if (['grid', 'custom'].includes(type)) getdom(`.div_tank[tankid="${this.id}"] .${type}_params .btn_ok`)[0].click(); // regen grid and send it
+		
+		drawOverlay();
 	}
 	createMarkerGrid(w, h, cs, cm){
 		let ids = [];
@@ -836,6 +847,23 @@ class Tank{
 		
 		this.data.markers.grid.corners = corners;
 		this.data.markers.grid.ids = ids;
+		
+		this.sendOptsMarkers();
+		drawOverlay();
+	}
+	createCustomMarkerGrid(val){
+		// data like: id1,x1,y1,z1,...,x4,y4,z4,id2,...
+		let parts = val.split(',');
+		this.data.markers.custom.corners = [];
+		this.data.markers.custom.ids = [];
+		
+		if (parts[0] != ""){
+			for (let i=0; i<parts.length; i+=13){
+				let corners = parts.slice(i+1, i+13).map(el=>Number(el));
+				this.data.markers.custom.corners.push([ corners.slice(0, 3), corners.slice(3, 6), corners.slice(6, 9), corners.slice(9, 12) ]);
+				this.data.markers.custom.ids.push(Number(parts[i]));
+			}
+		}
 		
 		this.sendOptsMarkers();
 		drawOverlay();
@@ -957,7 +985,7 @@ function addTank(){
 			</details><br>
 			<details>
 				<summary>Markers</summary>
-				Type: ${html_radiozone("radio_boardtype", ["grid", "auto"], tank.data.markers.type == 'auto' ? 1 : 0, tankidattr)}
+				Type: ${html_radiozone("radio_boardtype", ["grid", "custom", "auto"], DEFAULT_BOARD_TYPES.indexOf(tank.data.markers.type), tankidattr)}
 				<div class="markers_params_container">
 					<input type="checkbox" class="check_displayids" ${tank.data.markers.disp_ids ? "checked" : ""}>Display IDs
 					<br>IDs range (inclusive): ${html_inputzone(
@@ -973,6 +1001,10 @@ function addTank(){
 							repeat(4, tankidattr+' size=2'),
 							['   Nb. H: ', '<br>Cell size: ', 'm   Cell margin: ']
 						)}m
+					</div>
+					<div class="markers_params custom_params" ${tankidattr} style="display:${tank.data.markers.type == 'custom' ? 'inline' : 'none'}">
+						Corners: ${html_inputzone(1, 'input_customparams', [''], [tankidattr+" style='vertical-align:middle;'"], null, 'textarea')}
+						<br>from file <input type='file'class='input_customfile'>
 					</div>
 					<div class="markers_params auto_params" ${tankidattr} style="display:${tank.data.markers.type == 'auto' ? 'inline' : 'none'}">
 						Cell size: ${html_inputzone(
@@ -990,7 +1022,8 @@ function addTank(){
 				<summary>Obstacles</summary>
 				<details style="margin-left: 1rem;">
 					<summary>Virtual</summary>
-					Rect: <textarea class="input_virtobstrect" style="vertical-align:middle;" ${tankidattr}></textarea><!--
+					Weight: ${html_inputzone(1, 'input_virtobstw', [tank.data.obstacles.virtual.w], [tankidattr+' size=2'])}
+					<br>Rect: <textarea class="input_virtobstrect" style="vertical-align:middle;" ${tankidattr}></textarea><!--
 					--><input type="image" src="res/click.png" class="btn_pickvirtobstrect btn_blink btn" ${tankidattr} style="animation:none;"></input>
 					<br><input type="button" class="btn_addvirtobstrect" value="Add rect">
 					<br><input type="button" class="btn_delvirtobstrect" value="Remove rect"> id n°<input type="text" class="input_delvirtobstrect" value=0 size=1>
@@ -1004,6 +1037,7 @@ function addTank(){
 					<div style="max-width: 15rem;">
 						N markers per obstacle, marker ids per obstacle should all be the same
 					</div>
+					<br>Weight: ${html_inputzone(1, 'input_markedobstw', [tank.data.obstacles.marked.w], [tankidattr+' size=2'])}
 					<br>IDs range (inclusive): ${html_inputzone(
 						2, 'input_obstmarkersidrange',
 						tank.data.obstacles.marked.ids_range,
@@ -1062,6 +1096,9 @@ function addTank(){
 		nodes => tank.createMarkerGrid(...nodes.map(node => Number(node.value)))
 	, 4, tankdiv, '.input_gridparams');
 	set_inputzonebtns_callbacks(
+		nodes => tank.createCustomMarkerGrid(nodes[0].value)
+	, 1, tankdiv, '.input_customparams');
+	set_inputzonebtns_callbacks(
 		nodes => tank.sendOptsSET(['markers', 'auto_s'], Number(nodes[0].value))
 	, 1, tankdiv, '.input_autoparams');
 	set_inputzonebtns_callbacks(
@@ -1073,6 +1110,12 @@ function addTank(){
 	set_inputzonebtns_callbacks(
 		nodes => tank.sendOptsSET(['obstacles', 'marked', 's'], Number(nodes[0].value))
 	, 1, tankdiv, '.input_markedobst_size');
+	set_inputzonebtns_callbacks(
+		nodes => tank.sendOptsSET(['obstacles', 'virtual', 'w'], Number(nodes[0].value))
+	, 1, tankdiv, '.input_virtobstw');
+	set_inputzonebtns_callbacks(
+		nodes => tank.sendOptsSET(['obstacles', 'marked', 'w'], Number(nodes[0].value))
+	, 1, tankdiv, '.input_markedobstw');
 	
 	// html_radiozone callbacks
 	set_radiozone_callbacks(
@@ -1150,6 +1193,14 @@ function addTank(){
 	});
 	getdom('.check_db_view', tankdiv)[0].addEventListener('change', function(){
 		tank.sendOptsSET(['camera', 'db_view', 'on'], this.checked);
+	});
+	getdom('.input_customfile', tankdiv)[0].addEventListener('change', function(ev){
+		let reader = new FileReader();
+		reader.readAsText(ev.target.files[0], 'UTF-8');
+		reader.onload = rev => {
+			getdom('.input_customparams', tankdiv)[0].value = rev.target.result;
+			getdom('.custom_params .btn_ok', tankdiv)[0].click();
+		}
 	});
 }
 
@@ -1478,7 +1529,7 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
-	. fix reverse drive mode
+	. add input for obstacles weight
 	. add ability to delete specific markers from auto board
 	. add cannon behavior	
 	. add support for multiple tanks (using different ports ?) (using udp broadcast to set ports ?)
