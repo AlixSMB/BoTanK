@@ -603,6 +603,7 @@ while True:
 #	- handle timers differently ?
 
 # limit rotation speed ?
+# rotate when lost
 # add obstacle smoothing / remain delay ?
 # add flashlight to jetbot ?
 # finish detector perameters customization
