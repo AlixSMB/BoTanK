@@ -234,7 +234,7 @@ def getMarkedObstacles(cameradata, videoframe, mrange, s, collider, transfo, cor
 				for pnt in hull_pnts: 
 					obstacles[mid].append(pnt[0])
 					obstacles[mid].append(pnt[1])
-					
+			
 		elif collider == 'AABB':
 			for mid in board_points:
 				obstacles[mid] = []
@@ -246,6 +246,8 @@ def getMarkedObstacles(cameradata, videoframe, mrange, s, collider, transfo, cor
 				obstacles[mid] = [minX,minY, maxX,minY, maxX,maxY, minX,maxY]
 	
 	return Object(val=obstacles, collider=collider)
+def getUnmarkedObstacles(cameradata, videoframe, h, r, transfo):
+	return []
 
 
 # TODO:

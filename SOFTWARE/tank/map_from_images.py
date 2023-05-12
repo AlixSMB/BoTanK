@@ -3,7 +3,7 @@ import cv2.aruco as aruco
 import pickle
 import glob
 import os
-from util import Object
+from util import Object, fisheye_undistort
 import positioning 
 
 
@@ -24,8 +24,7 @@ def newAutoBoard():
 auto_board = newAutoBoard()
 
 for img in glob.glob('map_images/*.jpg'):
-	image = cv2.imread(img)
-	
+	image = fisheye_undistort(cameradata, cv2.imread(img))
 	corners, ids = positioning.getMarkers(cameradata, image, dictio, True)
 	positioning.auto_make_board(cameradata, image, auto_board, 0.0366, corners, ids, [0, 200])
 	
@@ -39,7 +38,6 @@ filename = f"auto_map_"
 while os.path.exists(filename+str(i)+'.txt') : i+=1
 filename += str(i) + '.txt'
 with open(filename, "w") as mapfile:
-	
 	mids = list(auto_board.cells.keys())
 	cornersAll = list(auto_board.cells.values())
 	msg = ''

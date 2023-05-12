@@ -1,7 +1,7 @@
 # Note for windows CMD: if QuickEdit mode is enabled, clicking the console freezes the script until a keyboard key is pressed... 
 
 from util import * # util.py
-from positioning import getMarkers, getBoardTransform, auto_make_board, getMarkedObstacles # positioning.py
+from positioning import getMarkers, getBoardTransform, auto_make_board, getMarkedObstacles, getUnmarkedObstacles # positioning.py
 
 import cv2
 from cv2 import aruco
@@ -195,6 +195,8 @@ def send_move_data(server):
 	
 	msg += f"obstacles,marked,obj;{ '|'.join([ ','.join(str(el) for el in obst) for obst in data['obstacles']['marked']['obj'].val.values() ]) };2\n"
 	
+	msg += f"obstacles,unmarked,obj;{','.join([str(el) for el in data['obstacles']['unmarked']['obj']])}\n"
+	
 	server.send(msg.encode('ascii'))
 def send_auto_markers():
 	msg = "SETAUTOMARKERS\n"
@@ -360,6 +362,11 @@ def auto_goto_point(target):
 	elif obj.collider == 'AABB':
 		for obstacle in obj.val.values() : influence_inv_vect(moveDir, *sdf_vect_aarect(*obstacle[:2], *obstacle[4:6], *transfo[0][:2]), w)
 	
+	# influence of unmarked obstacles on movement direction
+	w = data['obstacles']['unmarked']['w'].val # obstacle weight
+	obj = data['obstacles']['unmarked']['obj']
+	for i in range(0,len(obj),3) : influence_inv_vect(moveDir, *sdf_vect_circ(*obj[i:i+3], *transfo[0][:2]), w)
+	
 	# X, Y axes of tank
 	tankY = transfo[1]
 	tmp = tankY[0]**2 + tankY[1]**2
@@ -476,6 +483,12 @@ data = {
 			'w': Object(val=1, onchange=update_data),
 			's': Object(val=0.05, onchange=update_data),
 			'collider': Object(val='AABB', onchange=update_data) # bounding shape of the obstacles
+		},
+		'unmarked': { # cylindrical hitboxes
+			'obj': [],
+			'r': Object(val=0.04, onchange=update_data),
+			'h': Object(val=0.1, onchange=update_data),
+			'w': Object(val=1, onchange=update_data)
 		}
 	},
 	'camera': {
@@ -528,6 +541,11 @@ while True:
 					cameradata, camera_frame, 
 					data['obstacles']['marked']['ids_range'].val, data['obstacles']['marked']['s'].val, 
 					data['obstacles']['marked']['collider'].val, transfo, corners, ids
+				)
+				data['obstacles']['unmarked']['obj'] = getUnmarkedObstacles(
+					cameradata, camera_frame, 
+					data['obstacles']['unmarked']['h'].val, data['obstacles']['unmarked']['r'].val, 
+					transfo
 				)
 				
 				if data['move']['auto']['on'].val : auto_move()
