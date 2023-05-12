@@ -326,6 +326,8 @@ def sdf_vect_polygon(l, px,py):
 
 # rotate v1 based on v2 (v1 and v2 should be unit vectors)
 def influence_inv_vect(v1, v2, v2dist, w):
+	if math.isnan(v2[0]) or math.isnan(v2[1]) or v2dist == 0 : return # might happen if we collide with the obstacle
+	
 	v1[0] += v2[0] * w/v2dist # influence is inversly
 	v1[1] += v2[1] * w/v2dist # proportional to distance
 	dist = math.sqrt(v1[0]**2 + v1[1]**2)
@@ -422,6 +424,19 @@ def newAutoBoard():
 		orig = 9999
 	)
 
+def checkPermaObst(oldobj, newobj):
+	obj_times = data['obstacles']['marked']['obj_times']
+	maxdt = data['obstacles']['marked']['keep_delay'].val
+	
+	newt = time.perf_counter()
+	
+	for mid in newobj:
+		oldobj[mid] = newobj[mid]
+		obj_times[mid] = newt
+	
+	for mid in list(oldobj.keys()):
+		if newt-obj_times[mid] >= maxdt : del oldobj[mid]
+
 data = {
 	'move': {
 		'com': { # command
@@ -478,7 +493,9 @@ data = {
 			'w': Object(val=1, onchange=update_data), # "weight" of virtual obstacle
 		},
 		'marked': {
-			'obj': Object(val={}, collider='AABB'), # id->points
+			'obj': Object(val={}, collider='AABB'), # id->points, perma keeps obstacles for a delay if they are not visible still
+			'obj_times': {},
+			'keep_delay': Object(val=3, onchange=update_data),
 			'ids_range': Object(val=[201, 249], onchange=update_obst_markers_range),
 			'w': Object(val=1, onchange=update_data),
 			's': Object(val=0.05, onchange=update_data),
@@ -537,11 +554,17 @@ while True:
 				data['move']['real']['pos'].val = transfo[0][:2]
 				data['move']['real']['dir'].val = transfo[1]
 				
-				data['obstacles']['marked']['obj'] = getMarkedObstacles(
+				obstres = getMarkedObstacles(
 					cameradata, camera_frame, 
 					data['obstacles']['marked']['ids_range'].val, data['obstacles']['marked']['s'].val, 
 					data['obstacles']['marked']['collider'].val, transfo, corners, ids
 				)
+				checkPermaObst(
+					data['obstacles']['marked']['obj'].val,
+					obstres.val
+				)
+				data['obstacles']['marked']['obj'].collider = obstres.collider
+				
 				data['obstacles']['unmarked']['obj'] = getUnmarkedObstacles(
 					cameradata, camera_frame, 
 					data['obstacles']['unmarked']['h'].val, data['obstacles']['unmarked']['r'].val, 

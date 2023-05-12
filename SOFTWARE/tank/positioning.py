@@ -170,13 +170,13 @@ def getBoardTransform(cameradata, videoframe, board, transfo, corners, ids, dbvi
 		area = (np.linalg.det(p[:-1]) + np.linalg.det(p[1:])) / 2
 		if area > maxArea:
 			imgpoints = corners[i][0][np.newaxis]
-			objPoints = np.array([board.cells[mid]], dtype=np.float32)
+			objpoints = np.array([board.cells[mid]], dtype=np.float32)
 			maxArea = area
 			keptI = i
 	
-	if objPoints is None : return None
+	if objpoints is None : return None
 	#aruco.drawDetectedMarkers(videoframe, np.array([corners[keptI]], dtype=np.float32), np.array([ids[keptI]], dtype=np.float32))
-	_, rvec, tvec, reprErr = cv2.solvePnPGeneric(objPoints, imgpoints, cameradata['matrix'], cameradata['coeffs'], flags=cv2.SOLVEPNP_ITERATIVE)
+	_, rvec, tvec, reprErr = cv2.solvePnPGeneric(objpoints, imgpoints, cameradata['matrix'], cameradata['coeffs'], flags=cv2.SOLVEPNP_ITERATIVE)
 	rvec = np.array(rvec[0], dtype=np.float32)
 	tvec = np.array(tvec[0], dtype=np.float32)
 	
