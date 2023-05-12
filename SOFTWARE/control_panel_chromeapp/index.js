@@ -9,7 +9,7 @@ const HEARTBEAT_MAXTIME = 3000;
 // default dimensions of aruco grid
 const ARUCO_GRID_NBW = 8;
 const ARUCO_GRID_NBH = 5;
-const ARUCO_GRID_CSIZE = 0.0366; // cell size in meters
+const ARUCO_GRID_CSIZE = 0.037; // cell size in meters
 const ARUCO_GRID_CMARGIN = ARUCO_GRID_CSIZE;
 
 const DEFAULT_BOARD_TYPES = ["grid", "custom", "auto"];
@@ -17,7 +17,7 @@ const DEFAULT_BOARD_TYPES = ["grid", "custom", "auto"];
 const DEFAULT_OBST_W = 1
 
 // default marked obstacles
-const ARUCO_OBST_SIZE = 0.05; // m
+const ARUCO_OBST_SIZE = 0.037; // m
 const DEFAULT_MARKEDOBST_COLLIDERS = ['AABB', 'Hull'];
 const DEFAULT_MARKEDOBST_COLLIDER = 'AABB';
 

@@ -76,9 +76,11 @@ body{
 	display: flex;
 	flex-wrap: wrap;
 	justify-content: space-evenly;
+	overflow-y: scroll;
 }
 #div_msg{
-	max-height: 500px;
+	min-height: 100px;
+	max-height: 200px;
 	overflow-y: scroll;
 	max-width: 500px;
 }
