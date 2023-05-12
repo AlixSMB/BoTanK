@@ -14,6 +14,8 @@ const ARUCO_GRID_CMARGIN = ARUCO_GRID_CSIZE;
 
 const DEFAULT_BOARD_TYPES = ["grid", "custom", "auto"];
 
+const DEFAULT_OBST_W = 1
+
 // default marked obstacles
 const ARUCO_OBST_SIZE = 0.05; // m
 const DEFAULT_MARKEDOBST_COLLIDERS = ['AABB', 'Hull'];
@@ -454,14 +456,20 @@ class Tank{
 				virtual: {
 					rects: [],
 					lines: [],
-					w: 1
+					w: DEFAULT_OBST_W
 				},
 				marked: {
 					obj: [],
 					ids_range: DEFAULT_MIDRANGE_OBST,
 					s: ARUCO_OBST_SIZE,
 					collider: DEFAULT_MARKEDOBST_COLLIDER,
-					w: 1
+					w: DEFAULT_OBST_W
+				},
+				unmarked: { // cylindrical hitboxes
+					obj: [],
+					r: 0.04,
+					h: 0.1,
+					w: DEFAULT_OBST_W
 				}
 			},
 			camera: {
@@ -911,9 +919,8 @@ class Tank{
 		}
 		
 		// draw marked obstacles
-		ctx.main.save();
-		ctx.overlay.strokeStyle = this.color;
-		ctx.overlay.lineWidth = 4;
+		ctx.main.strokeStyle = this.color;
+		ctx.main.lineWidth = 4;
 		let obj = this.data.obstacles.marked.obj;
 		for (let obst of obj){
 			ctx.main.beginPath();
@@ -922,7 +929,13 @@ class Tank{
 			ctx.main.closePath();
 			ctx.main.stroke();
 		}
-		ctx.main.restore();
+		// draw unmarked obstacles
+		obj = this.data.obstacles.unmarked.obj;
+		for (let i=0; i<obj.length; i+=3){
+			ctx.main.beginPath();
+			ctx.main.arc(obst[i]*pxPerM, obst[i+1]*pxPerM, obst[i+2]*pxPerM, 0, Math.PI*2);
+			ctx.main.stroke();
+		}
 	}
 	
 	dispmsg(msg){
@@ -1050,6 +1063,15 @@ function addTank(){
 					)}m
 					<br><br>Collider: ${html_radiozone("radio_markedobstmode", DEFAULT_MARKEDOBST_COLLIDERS, DEFAULT_MARKEDOBST_COLLIDERS.indexOf(tank.data.obstacles.marked.collider), tankidattr)}
 				</details>
+				<details style="margin-left: 1rem;">
+					<summary>Unmarked</summary>
+					<div style="max-width: 15rem;">
+						Unmarked obstacles have a cylindrical collider
+					</div>
+					<br>Weight: ${html_inputzone(1, 'input_unmarkedobstw', [tank.data.obstacles.unmarked.w], [tankidattr+' size=2'])}
+					<br>Height: ${html_inputzone(1, 'input_unmarkedobsth', [tank.data.obstacles.unmarked.h], [tankidattr+' size=2'])}
+					<br>Diameter: ${html_inputzone(1, 'input_unmarkedobstd', [tank.data.obstacles.unmarked.r*2], [tankidattr+' size=2'])}
+				</details>
 			</details>	
 			<br>
 			<div>
@@ -1116,6 +1138,15 @@ function addTank(){
 	set_inputzonebtns_callbacks(
 		nodes => tank.sendOptsSET(['obstacles', 'marked', 'w'], Number(nodes[0].value))
 	, 1, tankdiv, '.input_markedobstw');
+	set_inputzonebtns_callbacks(
+		nodes => tank.sendOptsSET(['obstacles', 'unmarked', 'w'], Number(nodes[0].value))
+	, 1, tankdiv, '.input_unmarkedobstw');
+	set_inputzonebtns_callbacks(
+		nodes => tank.sendOptsSET(['obstacles', 'unmarked', 'h'], Number(nodes[0].value))
+	, 1, tankdiv, '.input_unmarkedobsth');
+	set_inputzonebtns_callbacks(
+		nodes => tank.sendOptsSET(['obstacles', 'unmarked', 'r'], Number(nodes[0].value)/2)
+	, 1, tankdiv, '.input_unmarkedobstd');
 	
 	// html_radiozone callbacks
 	set_radiozone_callbacks(
@@ -1529,7 +1560,6 @@ window.addEventListener("gamepaddisconnected", ev => {
 
 /*
 TODO:
-	. add input for obstacles weight
 	. add ability to delete specific markers from auto board
 	. add cannon behavior	
 	. add support for multiple tanks (using different ports ?) (using udp broadcast to set ports ?)
